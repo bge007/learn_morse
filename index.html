@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Morse Code Sound Generator · 700 Hz</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c232d;
+    --border: #2a323d;
+    --text: #e6edf3;
+    --muted: #8b96a5;
+    --accent: #ffb000;      /* CW amber */
+    --accent-2: #4cc2ff;
+    --green: #3fb950;
+    --red: #f0506e;
+    --radius: 12px;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 700px at 70% -10%, #18222e 0%, var(--bg) 55%);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    padding: 28px 18px 60px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 26px;
+    letter-spacing: .3px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  header h1 .dotdash { color: var(--accent); font-family: var(--mono); }
+  header p.sub { margin: 0 0 22px; color: var(--muted); }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  label.field-label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+
+  textarea#text {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font: 16px/1.5 var(--mono);
+    outline: none;
+  }
+  textarea#text:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(76,194,255,.12); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+  }
+  .field {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .field .name { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; display:flex; justify-content:space-between; gap:6px;}
+  .field .name b { color: var(--text); font-weight: 600; }
+  .field input[type="number"] {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font: 18px var(--mono);
+    outline: none;
+    padding: 0;
+  }
+  .field .unit { color: var(--muted); font-size: 12px; }
+  .field input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .toggle { display: flex; align-items: center; gap: 9px; margin-top: 14px; font-size: 14px; color: var(--text); cursor: pointer; user-select: none; flex-wrap: wrap; }
+  .toggle input { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
+  .toggle select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; font-size: 13.5px; cursor: pointer; outline: none; }
+  .toggle select:focus { border-color: var(--accent-2); }
+  .toggle-note { color: var(--muted); font-size: 12.5px; }
+  button {
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 11px 18px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .05s ease, background .15s ease, opacity .15s ease;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  button:hover:not(:disabled) { background: #232c38; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #1a1300; border-color: var(--accent); }
+  button.primary:hover:not(:disabled) { background: #ffc23d; }
+  button.danger { color: var(--red); border-color: #43242c; }
+  button.ghost { background: transparent; }
+
+  .progress {
+    height: 8px; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 999px; overflow: hidden; margin-top: 14px;
+  }
+  .progress > div { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #ff7b00); transition: width .05s linear; }
+
+  .status { margin-top: 10px; min-height: 20px; font-size: 13px; color: var(--muted); }
+  .status.ok { color: var(--green); }
+  .status.err { color: var(--red); }
+
+  .morse-out {
+    font: 18px/1.9 var(--mono);
+    color: var(--accent);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    min-height: 46px;
+    word-break: break-word;
+    white-space: pre-wrap;
+    letter-spacing: 1px;
+  }
+  .morse-out .wsep { color: var(--muted); }
+  .meta { display:flex; flex-wrap:wrap; gap: 18px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .meta b { color: var(--text); }
+
+  /* 9:16 transmit stage */
+  .stage-wrap { display: flex; justify-content: center; padding: 2px 0; }
+  .stage {
+    position: relative;
+    aspect-ratio: 9 / 16;
+    height: min(70vh, 560px);
+    max-width: 94vw;
+    background: radial-gradient(120% 75% at 50% 6%, #1b2530 0%, #0b0f14 72%);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 44px 16px 18px;
+    overflow: hidden;
+    box-shadow: inset 0 0 70px rgba(0,0,0,.55), 0 12px 40px rgba(0,0,0,.4);
+  }
+  .stage-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+    width: 100%;
+    min-height: 0;
+  }
+  .stage::before {
+    content: "9 : 16";
+    position: absolute; top: 14px; left: 0; right: 0;
+    text-align: center; font: 11px var(--mono); letter-spacing: 3px; color: #3a4654;
+  }
+  .stage-char {
+    font: 800 clamp(92px, 30vh, 220px)/1 var(--mono);
+    color: #46525f;                       /* dim during gaps / idle */
+    transition: color .07s ease, text-shadow .07s ease, transform .07s ease;
+    user-select: none;
+  }
+  .stage-char.lit {
+    color: var(--accent);
+    text-shadow: 0 0 38px rgba(255,176,0,.65), 0 0 14px rgba(255,176,0,.85);
+    transform: scale(1.05);
+  }
+  .stage-char.speaking {
+    color: var(--accent-2);
+    text-shadow: 0 0 38px rgba(76,194,255,.6), 0 0 14px rgba(76,194,255,.85);
+    transform: scale(1.04);
+  }
+  .stage-symbols { display: flex; align-items: center; gap: 14px; min-height: 22px; }
+  .sym { background: #2a323d; transition: background .06s ease, box-shadow .06s ease, transform .06s ease; }
+  .sym.dot  { width: 20px; height: 20px; border-radius: 50%; }
+  .sym.dash { width: 56px; height: 20px; border-radius: 10px; }
+  .sym.played { background: rgba(255,176,0,.5); }
+  .sym.active { background: var(--accent); box-shadow: 0 0 22px var(--accent); transform: scale(1.18); }
+  .stage-caption {
+    width: 100%; flex-shrink: 0;
+    text-align: center; font: 15px/1.7 var(--mono); color: var(--muted);
+    word-break: break-word; max-height: 32%; overflow: hidden;
+  }
+  .stage-caption .cap-ch { padding: 0 1px; }
+  .stage-caption .cap-ch.active { color: var(--accent); font-weight: 700; text-shadow: 0 0 10px rgba(255,176,0,.5); }
+
+  .rec-canvas {
+    height: min(70vh, 560px);
+    width: auto;
+    max-width: 94vw;
+    border-radius: 22px;
+    border: 1px solid var(--border);
+    box-shadow: 0 12px 40px rgba(0,0,0,.4);
+    outline: 2px solid rgba(240,80,110,.45);
+    outline-offset: 4px;
+  }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 26px; }
+  a { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="dotdash">·−</span> Morse Code Sound Generator</h1>
+    <p class="sub">Type text, convert to Morse, and play it as a <b>700&nbsp;Hz</b> tone. Runs entirely in your browser.</p>
+  </header>
+
+  <div class="card">
+    <h2>Input text</h2>
+    <textarea id="text" placeholder="Type a message, e.g.  HELLO WORLD" spellcheck="false">HELLO WORLD</textarea>
+    <div class="meta">
+      <span>Tip: press <b>Ctrl/Cmd&nbsp;+&nbsp;Enter</b> to play.</span>
+      <span id="charsInfo"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Morse output</h2>
+    <div id="morseOut" class="morse-out"></div>
+    <div class="meta">
+      <span>Speed: <b id="wpm">—</b></span>
+      <span>Total duration: <b id="dur">—</b></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Configuration</h2>
+    <div class="grid">
+      <div class="field">
+        <div class="name"><span>Tone frequency</span><span class="unit">Hz</span></div>
+        <input type="number" id="freq" value="700" min="20" max="12000" step="1" />
+      </div>
+      <div class="field">
+        <div class="name"><span>Dot duration</span><span class="unit">ms</span></div>
+        <input type="number" id="dot" value="92" min="1" step="1" />
+      </div>
+      <div class="field">
+        <div class="name"><span>Dash duration</span><span class="unit">ms</span></div>
+        <input type="number" id="dash" value="277" min="1" step="1" />
+      </div>
+      <div class="field">
+        <div class="name"><span>Gap between sounds</span><span class="unit">ms</span></div>
+        <input type="number" id="gapElement" value="92" min="0" step="1" />
+      </div>
+      <div class="field">
+        <div class="name"><span>Gap between letters</span><span class="unit">ms</span></div>
+        <input type="number" id="gapLetter" value="277" min="0" step="1" />
+      </div>
+      <div class="field">
+        <div class="name"><span>Gap between words</span><span class="unit">ms</span></div>
+        <input type="number" id="gapWord" value="645" min="0" step="1" />
+      </div>
+      <div class="field">
+        <div class="name"><span>Volume</span><span class="unit"><span id="volLabel">70</span>%</span></div>
+        <input type="range" id="volume" value="0.7" min="0" max="1" step="0.01" />
+      </div>
+    </div>
+    <div class="hint">Defaults follow standard Morse timing at this dot length (dot = 1 unit, dash = 3 units, letter gap = 3 units, word gap = 7 units).</div>
+  </div>
+
+  <div class="card">
+    <h2>Playback</h2>
+    <div class="controls">
+      <button id="play" class="primary">▶ Play</button>
+      <button id="stop" class="danger" disabled>■ Stop</button>
+      <button id="download" class="ghost">⤓ Download .wav</button>
+      <button id="recordVideo" class="ghost">🎬 Generate video (9:16)</button>
+      <button id="reset" class="ghost">↺ Reset defaults</button>
+    </div>
+    <label class="toggle">🔊 Speak
+      <select id="speakMode">
+        <option value="off">Off</option>
+        <option value="letters" selected>Each letter (on change)</option>
+        <option value="words">Whole word</option>
+      </select>
+      <span class="toggle-note">before its Morse — words use clips in spoken/words/ (else fall back to letters)</span>
+    </label>
+    <label class="toggle"><input type="checkbox" id="loop" /> 🔁 Loop <span class="toggle-note">— repeat until you press Stop</span></label>
+    <div class="progress"><div id="bar"></div></div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Now transmitting · 9:16</h2>
+    <div class="stage-wrap">
+      <div id="stage" class="stage">
+        <div class="stage-main">
+          <div id="stageChar" class="stage-char">·−</div>
+          <div id="stageSymbols" class="stage-symbols"></div>
+        </div>
+        <div id="stageCaption" class="stage-caption"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Single static file — works offline. Uses the Web Audio API.</footer>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- Morse table ---------- */
+const MORSE = {
+  A:".-", B:"-...", C:"-.-.", D:"-..", E:".", F:"..-.", G:"--.", H:"....",
+  I:"..", J:".---", K:"-.-", L:".-..", M:"--", N:"-.", O:"---", P:".--.",
+  Q:"--.-", R:".-.", S:"...", T:"-", U:"..-", V:"...-", W:".--", X:"-..-",
+  Y:"-.--", Z:"--..",
+  "0":"-----","1":".----","2":"..---","3":"...--","4":"....-",
+  "5":".....","6":"-....","7":"--...","8":"---..","9":"----.",
+  ".":".-.-.-", ",":"--..--", "?":"..--..", "'":".----.", "!":"-.-.--",
+  "/":"-..-.", "(":"-.--.", ")":"-.--.-", "&":".-...", ":":"---...",
+  ";":"-.-.-.", "=":"-...-", "+":".-.-.", "-":"-....-", "_":"..--.-",
+  '"':".-..-.", "$":"...-..-", "@":".--.-."
+};
+
+/* ---------- DOM ---------- */
+const $ = id => document.getElementById(id);
+const textEl = $("text");
+const morseOut = $("morseOut");
+const statusEl = $("status");
+const bar = $("bar");
+const wpmEl = $("wpm");
+const durEl = $("dur");
+const volLabel = $("volLabel");
+const charsInfo = $("charsInfo");
+const stageChar = $("stageChar");
+const stageSymbols = $("stageSymbols");
+const stageCaption = $("stageCaption");
+const cfgIds = ["freq","dot","dash","gapElement","gapLetter","gapWord","volume"];
+const DEFAULTS = { freq:700, dot:92, dash:277, gapElement:92, gapLetter:277, gapWord:645, volume:0.7 };
+const MONO = 'ui-monospace, "Cascadia Mono", "Consolas", monospace';
+
+/* ---------- Config ---------- */
+function readConfig() {
+  const get = (id, def, min, max) => {
+    let v = parseFloat($(id).value);
+    if (!isFinite(v)) v = def;
+    if (v < min) v = min;
+    if (max != null && v > max) v = max;
+    return v;
+  };
+  return {
+    freq:        get("freq", 700, 20, 12000),
+    dot:         get("dot", 92, 1),
+    dash:        get("dash", 277, 1),
+    gapElement:  get("gapElement", 92, 0),
+    gapLetter:   get("gapLetter", 277, 0),
+    gapWord:     get("gapWord", 645, 0),
+    volume:      get("volume", 0.7, 0, 1)
+  };
+}
+
+/* ---------- Text -> Morse ---------- */
+// Returns array of words; each word is an array of element-strings (e.g. ".-").
+// Unknown characters are skipped.
+function textToWords(text) {
+  const words = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  const out = [];
+  for (const w of words) {
+    const letters = [];
+    for (const ch of w) {
+      const code = MORSE[ch];
+      if (code) letters.push({ ch, code });
+    }
+    if (letters.length) out.push(letters);
+  }
+  return out;
+}
+
+function morseDisplay(text) {
+  const words = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return "";
+  return words
+    .map(w => [...w].map(c => MORSE[c] || "").filter(Boolean).join(" "))
+    .filter(Boolean)
+    .join("   /   ");
+}
+
+/* ---------- Spoken audio: speak letters or whole words before Morse ---------- */
+const LETTER_BASE = "spoken/";
+const WORD_BASE = "spoken/words/";
+const clipRaw = {};     // url -> ArrayBuffer | null  (fetch attempted)
+const clipDur = {};     // url -> trimmed duration (s)  (>0 means clip exists & usable)
+const clipTried = {};   // url -> true  (metadata decode attempted)
+let metaCtx = null;
+
+function speakMode() { const s = $("speakMode"); return s ? s.value : "off"; }
+function letterURL(ch) { return LETTER_BASE + ch.toLowerCase() + ".mp3"; }
+function wordKey(text) { return text.toLowerCase().replace(/[^a-z0-9]+/g, ""); }
+function wordURL(text) { return WORD_BASE + wordKey(text) + ".mp3"; }
+function clipAvail(url) { return clipDur[url] > 0; }
+function metaContext() {
+  if (!metaCtx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) { try { metaCtx = new AC(); } catch (e) {} } }
+  return metaCtx;
+}
+
+// Trim leading/trailing near-silence and normalize, so spoken clips are tight and
+// roughly as loud as the Morse tone (raw TTS has ~0.8s trailing silence, low level).
+function trimBuffer(ac, buf, thresh = 0.02, padPre = 0.03, padPost = 0.08, target = 0.9) {
+  const d = buf.getChannelData(0);
+  let first = -1, last = -1, peak = 0;
+  for (let i = 0; i < d.length; i++) {
+    const a = Math.abs(d[i]);
+    if (a > peak) peak = a;
+    if (a > thresh) { if (first < 0) first = i; last = i; }
+  }
+  if (first < 0) return buf;                 // all silence — leave untouched
+  const sr = buf.sampleRate;
+  const s = Math.max(0, first - Math.floor(padPre * sr));
+  const e = Math.min(d.length, last + Math.floor(padPost * sr));
+  const gain = peak > 0 ? Math.min(8, target / peak) : 1;
+  const out = ac.createBuffer(1, e - s, sr);
+  const od = out.getChannelData(0);
+  for (let i = s; i < e; i++) od[i - s] = d[i] * gain;
+  return out;
+}
+
+async function fetchClip(url) {
+  if (url in clipRaw) return clipRaw[url];
+  try { const res = await fetch(url); clipRaw[url] = res.ok ? await res.arrayBuffer() : null; }
+  catch (e) { clipRaw[url] = null; }
+  return clipRaw[url];
+}
+
+// Decode (fetch + trim) one clip for the given context; records its duration.
+async function decodeClip(ac, url) {
+  const raw = await fetchClip(url);
+  if (!raw) return null;
+  try { const b = trimBuffer(ac, await ac.decodeAudioData(raw.slice(0))); clipDur[url] = b.duration; return b; }
+  catch (e) { return null; }
+}
+
+// Learn durations/availability of the given urls on a shared (suspended) context,
+// so the estimate is accurate and the cache is warm. Refreshes the UI when new.
+async function ensureClipDurs(urls) {
+  const ac = metaContext(); if (!ac) return;
+  let changed = false;
+  for (const url of urls) {
+    if (clipTried[url]) continue;
+    clipTried[url] = true;
+    if (await decodeClip(ac, url)) changed = true;
+  }
+  if (changed) refresh();
+}
+
+// Preload all A–Z letter clips up front.
+function preloadSpoken() {
+  const urls = [];
+  for (let i = 0; i < 26; i++) urls.push(letterURL(String.fromCharCode(65 + i)));
+  ensureClipDurs(urls);
+}
+
+// Per-letter (reading order) speak assignment for the current mode: null | {url,label,isWord}.
+// Letters: speak a letter when it changes from the previous character.
+// Words: speak the whole word (on change); if no word clip exists, fall back to
+// spelling that word's letters (on change within the word).
+function speakAssignments(words, mode) {
+  let n = 0; for (const w of words) n += w.length;
+  const out = new Array(n).fill(null);
+  if (mode === "off") return out;
+
+  if (mode === "letters") {
+    let prev = null, i = 0;
+    for (const w of words) for (const x of w) {
+      const url = letterURL(x.ch);
+      if (x.ch >= "A" && x.ch <= "Z" && x.ch !== prev && clipAvail(url))
+        out[i] = { url, label: x.ch, isWord: false };
+      prev = x.ch; i++;
+    }
+    return out;
+  }
+
+  // mode === "words"
+  let prevWord = null, i = 0;
+  for (const w of words) {
+    const text = w.map(x => x.ch).join("");
+    const url = wordURL(text);
+    if (clipAvail(url)) {
+      if (text !== prevWord) out[i] = { url, label: text, isWord: true };
+    } else {
+      let prevCh = null, j = i;                  // no word clip -> spell its letters
+      for (const x of w) {
+        const lu = letterURL(x.ch);
+        if (x.ch >= "A" && x.ch <= "Z" && x.ch !== prevCh && clipAvail(lu))
+          out[j] = { url: lu, label: x.ch, isWord: false };
+        prevCh = x.ch; j++;
+      }
+    }
+    prevWord = text; i += w.length;
+  }
+  return out;
+}
+
+// Decode every clip referenced by the current mode into the playback context.
+async function decodeAssignments(ac, words, mode) {
+  if (mode === "off") return {};
+  const urls = new Set();
+  if (mode === "words") for (const w of words) urls.add(wordURL(w.map(x => x.ch).join("")));
+  for (const w of words) for (const x of w) if (x.ch >= "A" && x.ch <= "Z") urls.add(letterURL(x.ch));
+  const buffers = {};
+  await Promise.all([...urls].map(async u => { const b = await decodeClip(ac, u); if (b) buffers[u] = b; }));
+  return buffers;
+}
+
+/* ---------- Scheduling / timeline ---------- */
+const SPOKEN_GAP = 0.12;   // silence between a spoken letter and its Morse
+
+// Build the full playback plan in offsets from 0. Each letter may begin with a
+// spoken clip (a letter name or a whole word), per getSpeak(flatIndex), followed
+// by its Morse elements. getSpeak(i) returns null | { url, label, isWord, dur }.
+// Returns { letters:[{ch,code,isWordEnd,spell,isWord,speakLabel,speakUrl,
+//           spokenStart,spokenDur,morseStart,elements:[{sym,on,off}],start,end,until}], duration }.
+function buildPlan(words, cfg, getSpeak) {
+  const dot = cfg.dot / 1000, dash = cfg.dash / 1000;
+  const eg = cfg.gapElement / 1000, lg = cfg.gapLetter / 1000, wg = cfg.gapWord / 1000;
+  let t = 0, flat = 0;
+  const letters = [];
+  for (let wi = 0; wi < words.length; wi++) {
+    const word = words[wi];
+    for (let li = 0; li < word.length; li++) {
+      const ch = word[li].ch, code = word[li].code;
+      const start = t;
+      const sp = getSpeak ? getSpeak(flat) : null;
+      const spell = !!(sp && sp.dur > 0);
+      const spokenStart = t;
+      const spokenDur = spell ? sp.dur : 0;
+      if (spell) t += spokenDur + SPOKEN_GAP;
+      const morseStart = t;
+      const elements = [];
+      for (let ei = 0; ei < code.length; ei++) {
+        const d = code[ei] === "." ? dot : dash;
+        elements.push({ sym: code[ei], on: t, off: t + d });
+        t += d;
+        if (ei < code.length - 1) t += eg;
+      }
+      letters.push({ ch, code, isWordEnd: li === word.length - 1,
+                     spell, isWord: spell ? !!sp.isWord : false,
+                     speakLabel: spell ? sp.label : null, speakUrl: spell ? sp.url : null,
+                     spokenStart, spokenDur, morseStart, elements, start, end: t });
+      flat++;
+      if (li < word.length - 1) t += lg;
+    }
+    if (wi < words.length - 1) t += wg;
+  }
+  for (let i = 0; i < letters.length; i++)
+    letters[i].until = (i + 1 < letters.length) ? letters[i + 1].start : letters[i].end;
+  return { letters, duration: t };
+}
+
+// Build the plan for the current text + speak mode. `buffers` (url->AudioBuffer),
+// when present, gives exact clip durations; otherwise known clipDur is used.
+function planFor(words, cfg, buffers) {
+  const assignments = speakAssignments(words, speakMode());
+  const durFn = url => (buffers && buffers[url] ? buffers[url].duration : (clipDur[url] || 0));
+  const getSpeak = i => {
+    const a = assignments[i];
+    if (!a) return null;
+    const d = durFn(a.url);
+    return d > 0 ? { url: a.url, label: a.label, isWord: a.isWord, dur: d } : null;
+  };
+  return buildPlan(words, cfg, getSpeak);
+}
+
+function estimateDuration(words, cfg) { return planFor(words, cfg, null).duration; }
+
+// Schedule the Morse tone envelope (gating a running oscillator) for the plan.
+function scheduleTones(gainParam, plan, startAt, vol) {
+  for (const L of plan.letters) {
+    for (const e of L.elements) {
+      const dur = e.off - e.on, at = startAt + e.on, r = Math.min(0.004, dur / 3);
+      gainParam.setValueAtTime(0, at);
+      gainParam.linearRampToValueAtTime(vol, at + r);
+      gainParam.setValueAtTime(vol, at + dur - r);
+      gainParam.linearRampToValueAtTime(0, at + dur);
+    }
+  }
+}
+
+// Schedule the spoken clips; returns the source nodes (so they can be stopped).
+function scheduleSpeech(ac, dest, buffers, plan, startAt) {
+  const sources = [];
+  for (const L of plan.letters) {
+    if (!L.spell || !L.speakUrl) continue;
+    const buf = buffers[L.speakUrl];
+    if (!buf) continue;
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    src.connect(dest);
+    src.start(startAt + L.spokenStart);
+    sources.push(src);
+  }
+  return sources;
+}
+
+/* ---------- Live playback ---------- */
+let ctx = null, osc = null, gainNode = null, speechGain = null, spokenSources = [];
+let isPlaying = false, rafId = null, playStart = 0, playEnd = 0, plan = null;
+let timeline = [], stageSpans = [], curIdx = -1;
+let loopOn = false, iterStart = 0, iterLen = 0, scheduledIter = 0, loopVol = 0, loopBuffers = {};
+const LOOP_GAP = 1.0;   // pause between repeats when looping
+function loopEnabled() { const c = $("loop"); return c ? c.checked : false; }
+
+function setStatus(msg, kind) {
+  statusEl.textContent = msg || "";
+  statusEl.className = "status" + (kind ? " " + kind : "");
+}
+function setButtons() {
+  const busy = isPlaying || isRecording;
+  $("stop").disabled = !busy;
+  $("play").disabled = isRecording;
+  $("play").textContent = isPlaying ? "▶ Restart" : "▶ Play";
+  $("download").disabled = busy;
+  $("recordVideo").disabled = busy;
+  $("recordVideo").textContent = isRecording ? "● Recording…" : "🎬 Generate video (9:16)";
+}
+
+async function play() {
+  if (isPlaying) stopPlayback();
+
+  const words = textToWords(textEl.value);
+  if (!words.length) { setStatus("Enter some text with letters, digits or punctuation.", "err"); return; }
+
+  const cfg = readConfig();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { setStatus("Web Audio API is not supported in this browser.", "err"); return; }
+
+  ctx = new AC();
+  try { await ctx.resume(); } catch (e) {}
+
+  // Load + decode the spoken clips we may need (letters and/or words).
+  const mode = speakMode();
+  let buffers = {};
+  if (mode !== "off") {
+    setStatus("Loading audio…");
+    try { buffers = await decodeAssignments(ctx, words, mode); } catch (e) { buffers = {}; }
+  }
+  if (!ctx) return; // stopped while awaiting
+
+  plan = planFor(words, cfg, buffers);
+  timeline = plan.letters;
+  buildCaption();
+  curIdx = -1;
+
+  osc = ctx.createOscillator();
+  gainNode = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(cfg.freq, ctx.currentTime);
+  gainNode.gain.setValueAtTime(0, ctx.currentTime);
+  osc.connect(gainNode);
+  gainNode.connect(ctx.destination);
+
+  speechGain = ctx.createGain();
+  speechGain.gain.value = Math.min(1, cfg.volume * 1.2);
+  speechGain.connect(ctx.destination);
+
+  playStart = ctx.currentTime + 0.12;
+  loopOn = loopEnabled();
+  loopVol = cfg.volume;
+  loopBuffers = buffers;
+  iterStart = playStart;
+  iterLen = plan.duration + LOOP_GAP;
+  scheduledIter = 0;
+  spokenSources = [];
+
+  scheduleTones(gainNode.gain, plan, playStart, cfg.volume);   // first pass
+  trackSpeech(scheduleSpeech(ctx, speechGain, buffers, plan, playStart));
+  playEnd = playStart + plan.duration;
+
+  osc.start(playStart);
+  if (loopOn) {
+    // oscillator keeps running; further passes are scheduled in rafTick until Stop
+  } else {
+    osc.onended = finishPlayback;
+    osc.stop(playEnd + 0.05);
+  }
+
+  isPlaying = true;
+  setButtons();
+  const nSpeak = plan.letters.filter(l => l.spell).length;
+  setStatus((loopOn ? "Looping… " : "Playing… ") + (playEnd - playStart).toFixed(1) + "s" +
+            (loopOn ? "/pass" : "") +
+            (nSpeak ? " · speaking " + nSpeak + " clip" + (nSpeak > 1 ? "s" : "") : ""), "ok");
+  bar.style.width = "0%";
+  rafTick();
+}
+
+function rafTick() {
+  if (!isPlaying || !ctx) return;
+  const now = ctx.currentTime;
+  if (loopOn) {
+    const curIter = Math.max(0, Math.floor((now - playStart) / iterLen));
+    iterStart = playStart + curIter * iterLen;
+    while (scheduledIter < curIter + 1) {        // schedule the next pass ahead of time
+      scheduledIter++;
+      const at = playStart + scheduledIter * iterLen;
+      scheduleTones(gainNode.gain, plan, at, loopVol);
+      trackSpeech(scheduleSpeech(ctx, speechGain, loopBuffers, plan, at));
+    }
+    bar.style.width = Math.max(0, Math.min(1, (now - iterStart) / plan.duration)) * 100 + "%";
+    updateStage(now);
+    rafId = requestAnimationFrame(rafTick);      // never ends on its own; Stop ends it
+  } else {
+    const span = playEnd - playStart;
+    const frac = span > 0 ? (now - playStart) / span : 1;
+    bar.style.width = Math.max(0, Math.min(1, frac)) * 100 + "%";
+    updateStage(now);
+    if (frac < 1) rafId = requestAnimationFrame(rafTick);
+  }
+}
+
+function trackSpeech(srcs) {
+  for (const s of srcs) {
+    spokenSources.push(s);
+    s.onended = () => { const i = spokenSources.indexOf(s); if (i >= 0) spokenSources.splice(i, 1); };
+  }
+}
+
+function stopSpokenSources() {
+  for (const s of spokenSources) { try { s.onended = null; s.stop(); } catch (e) {} }
+  spokenSources = [];
+}
+
+function stopPlayback() {
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+    gainNode.gain.linearRampToValueAtTime(0, now + 0.01);
+    osc.stop(now + 0.03);
+  } catch (e) {}
+  stopSpokenSources();
+  finishPlayback(true);
+}
+
+function finishPlayback(stopped) {
+  if (!isPlaying) return;
+  isPlaying = false;
+  loopOn = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  stopSpokenSources();
+  setButtons();
+  setStatus(stopped === true ? "Stopped." : "Done.", "ok");
+  setStagePlaceholder();
+  const old = ctx;
+  ctx = osc = gainNode = speechGain = null;
+  setTimeout(() => { try { old && old.close(); } catch (e) {} }, 80);
+  setTimeout(() => { bar.style.width = "0%"; }, 450);
+}
+
+/* ---------- 9:16 transmit display ---------- */
+function setStagePlaceholder() {
+  stageChar.textContent = "·−";          // ·−
+  stageChar.classList.remove("lit", "speaking");
+  stageChar.style.fontSize = "";
+  stageSymbols.innerHTML = "";
+  stageCaption.innerHTML = '<span style="opacity:.7">Press Play to transmit</span>';
+  stageSpans = [];
+  curIdx = -1;
+}
+
+function buildCaption() {
+  stageCaption.innerHTML = "";
+  stageSpans = [];
+  for (let i = 0; i < timeline.length; i++) {
+    const sp = document.createElement("span");
+    sp.className = "cap-ch";
+    sp.textContent = timeline[i].ch;
+    stageCaption.appendChild(sp);
+    stageSpans.push(sp);
+    if (timeline[i].isWordEnd && i < timeline.length - 1)
+      stageCaption.appendChild(document.createTextNode(" ")); // em space between words
+  }
+}
+
+function renderEvent(idx) {
+  const ev = timeline[idx];
+  stageSymbols.innerHTML = "";
+  for (const el of ev.elements) {
+    const s = document.createElement("span");
+    s.className = "sym " + (el.sym === "." ? "dot" : "dash");
+    stageSymbols.appendChild(s);
+  }
+  for (let i = 0; i < stageSpans.length; i++)
+    stageSpans[i].classList.toggle("active", i === idx);
+}
+
+// Index of the letter whose display window contains `now` (it persists through
+// the trailing gap until the next letter begins). -1 during the lead-in.
+function idxAt(tl, now) {
+  if (!tl.length || now < tl[0].start) return -1;
+  let lo = 0, hi = tl.length - 1, res = 0;
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1;
+    if (tl[m].start <= now) { res = m; lo = m + 1; } else hi = m - 1;
+  }
+  return res;
+}
+
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+function fitCharFont(label, isWord) {
+  if (!isWord || !label || label.length <= 1) { stageChar.style.fontSize = ""; return; }
+  const cont = stageChar.parentElement;
+  const w = (cont ? cont.clientWidth : 300) * 0.9;
+  stageChar.style.fontSize = Math.max(28, Math.min(150, w / (label.length * 0.62))) + "px";
+}
+
+function updateStage(now) {
+  const rel = now - iterStart;                 // plan times are offsets from the current pass
+  const idx = idxAt(timeline, rel);
+  if (idx < 0) { if (curIdx !== -1) setStagePlaceholder(); return; }
+  if (idx !== curIdx) { renderEvent(idx); curIdx = idx; }
+  const ev = timeline[idx];
+  const spelling = ev.spell && rel < ev.morseStart;   // speaking the letter/word, before its Morse
+  const label = spelling ? ev.speakLabel : ev.ch;
+  if (stageChar.textContent !== label) stageChar.textContent = label;
+  fitCharFont(label, spelling && ev.isWord);
+  stageSymbols.style.visibility = (spelling && ev.isWord) ? "hidden" : "visible";
+  const syms = stageSymbols.children;
+  let anyOn = false;
+  for (let i = 0; i < ev.elements.length; i++) {
+    const e = ev.elements[i];
+    const on = !spelling && rel >= e.on && rel < e.off;
+    if (on) anyOn = true;
+    if (syms[i]) {
+      syms[i].classList.toggle("active", on);
+      syms[i].classList.toggle("played", !spelling && rel >= e.off);
+    }
+  }
+  stageChar.classList.toggle("lit", anyOn);        // amber while a tone sounds
+  stageChar.classList.toggle("speaking", spelling); // blue while speaking
+}
+
+/* ---------- WAV export ---------- */
+function encodeWav(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);     // subchunk size
+  view.setUint16(20, 1, true);      // PCM
+  view.setUint16(22, 1, true);      // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate
+  view.setUint16(32, 2, true);      // block align
+  view.setUint16(34, 16, true);     // bits per sample
+  writeStr(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  let off = 44;
+  for (let i = 0; i < samples.length; i++) {
+    let s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    off += 2;
+  }
+  return new Blob([view], { type: "audio/wav" });
+}
+
+async function downloadWav() {
+  const words = textToWords(textEl.value);
+  if (!words.length) { setStatus("Enter some text first.", "err"); return; }
+  const cfg = readConfig();
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!OAC) { setStatus("Offline audio rendering is not supported in this browser.", "err"); return; }
+
+  setStatus("Rendering WAV…");
+  const sr = 44100;
+  const mode = speakMode();
+  // Generous upper bound for the buffer length (trimmed exactly after render).
+  const morseOnly = buildPlan(words, cfg, null).duration;
+  const letterCount = words.reduce((n, w) => n + w.length, 0);
+  const speechUB = mode === "off" ? 0 : letterCount * 2.2 + words.length * 2.5;
+  const len = Math.ceil((morseOnly + speechUB + 1.0) * sr);
+  const octx = new OAC(1, len, sr);
+
+  let buffers = {};
+  if (mode !== "off") { try { buffers = await decodeAssignments(octx, words, mode); } catch (e) {} }
+  const p = planFor(words, cfg, buffers);
+
+  const o = octx.createOscillator();
+  const g = octx.createGain();
+  o.type = "sine";
+  o.frequency.setValueAtTime(cfg.freq, 0);
+  g.gain.setValueAtTime(0, 0);
+  o.connect(g);
+  g.connect(octx.destination);
+
+  const sg = octx.createGain();
+  sg.gain.value = Math.min(1, cfg.volume * 1.2);
+  sg.connect(octx.destination);
+
+  const startOff = 0.02;
+  scheduleTones(g.gain, p, startOff, cfg.volume);
+  scheduleSpeech(octx, sg, buffers, p, startOff);
+  o.start(0);
+  o.stop(startOff + p.duration + 0.05);
+
+  try {
+    const rendered = await octx.startRendering();
+    const total = Math.min(rendered.length, Math.ceil((startOff + p.duration + 0.05) * sr));
+    const blob = encodeWav(rendered.getChannelData(0).subarray(0, total), sr);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "morse-" + cfg.freq + "hz.wav";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("Saved morse-" + cfg.freq + "hz.wav (" + p.duration.toFixed(1) + "s).", "ok");
+  } catch (e) {
+    setStatus("WAV render failed: " + e.message, "err");
+  }
+}
+
+/* ---------- Video generation (9:16 canvas + audio -> MediaRecorder) ---------- */
+let isRecording = false, recorder = null, recCtx = null, recOsc = null,
+    recRaf = null, recCanceled = false, recCanvas = null, recSpeech = [];
+
+const VIDEO_TYPES = [
+  'video/mp4;codecs="avc1.640028,mp4a.40.2"',
+  'video/mp4;codecs=avc1',
+  'video/mp4',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm'
+];
+
+function buildCaptionWords(tl) {
+  const words = [];
+  let cur = [];
+  for (let i = 0; i < tl.length; i++) {
+    cur.push({ ch: tl[i].ch, idx: i });
+    if (tl[i].isWordEnd) { words.push(cur); cur = []; }
+  }
+  if (cur.length) words.push(cur);
+  return words;
+}
+
+// Pre-compute caption line layout once (text is fixed for the whole render).
+function layoutCaption(g, W, H, capWords) {
+  const font = 40, lineH = 58, marginX = 64, maxW = W - marginX * 2, maxLines = 4;
+  g.font = "400 " + font + "px " + MONO;
+  const spaceW = g.measureText("  ").width;
+  const lines = [];
+  let cur = [], curW = 0;
+  for (const w of capWords) {
+    const text = w.map(c => c.ch).join("");
+    const ww = g.measureText(text).width;
+    const add = (cur.length ? spaceW : 0) + ww;
+    if (curW + add > maxW && cur.length) { lines.push(cur); cur = []; curW = 0; }
+    cur.push({ word: w, width: ww });
+    curW += (cur.length > 1 ? spaceW : 0) + ww;
+  }
+  if (cur.length) lines.push(cur);
+  const used = lines.length > maxLines ? lines.slice(-maxLines) : lines;
+
+  const out = [];
+  let y = H - 96 - (used.length - 1) * lineH;
+  for (const ln of used) {
+    let lineWidth = 0;
+    for (let i = 0; i < ln.length; i++) { lineWidth += ln[i].width; if (i) lineWidth += spaceW; }
+    let x = (W - lineWidth) / 2;
+    const chars = [];
+    for (let i = 0; i < ln.length; i++) {
+      if (i) x += spaceW;
+      let cx = x;
+      for (const c of ln[i].word) {
+        chars.push({ ch: c.ch, idx: c.idx, x: cx });
+        cx += g.measureText(c.ch).width;
+      }
+      x += ln[i].width;
+    }
+    out.push({ chars, y });
+    y += lineH;
+  }
+  return { font, lines: out };
+}
+
+function drawFrame(g, W, H, letters, layout, now, startAt, endAt) {
+  // background
+  const grd = g.createRadialGradient(W * 0.5, H * 0.06, 0, W * 0.5, H * 0.06, H * 0.95);
+  grd.addColorStop(0, "#1b2530");
+  grd.addColorStop(0.72, "#0b0f14");
+  grd.addColorStop(1, "#0b0f14");
+  g.fillStyle = grd;
+  g.fillRect(0, 0, W, H);
+
+  // progress bar (top)
+  const frac = Math.max(0, Math.min(1, (now - startAt) / (endAt - startAt)));
+  g.fillStyle = "#1c232d"; g.fillRect(0, 0, W, 12);
+  g.fillStyle = "#ffb000"; g.fillRect(0, 0, W * frac, 12);
+
+  // "9 : 16" label
+  g.fillStyle = "#3a4654";
+  g.font = "600 26px " + MONO;
+  g.textAlign = "center"; g.textBaseline = "alphabetic";
+  g.fillText("9 : 1 6", W / 2, 74);
+
+  // active letter / element (plan times are offsets from startAt)
+  const rel = now - startAt;
+  const idx = idxAt(letters, rel);
+  const ev = idx >= 0 ? letters[idx] : null;
+  const spelling = ev && ev.spell && rel < ev.morseStart;
+  let anyOn = false;
+  if (ev && !spelling) for (const e of ev.elements) { if (rel >= e.on && rel < e.off) { anyOn = true; break; } }
+
+  // big character (or spoken whole word)
+  const label = spelling ? (ev.speakLabel || ev.ch) : (ev ? ev.ch : "·−");
+  const fs = label.length > 1 ? Math.max(110, Math.min(540, (W * 0.84) / (label.length * 0.62))) : 540;
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.font = "800 " + fs + "px " + MONO;
+  if (spelling) { g.fillStyle = "#4cc2ff"; g.shadowColor = "rgba(76,194,255,0.75)"; g.shadowBlur = 90; }
+  else if (anyOn) { g.fillStyle = "#ffb000"; g.shadowColor = "rgba(255,176,0,0.75)"; g.shadowBlur = 90; }
+  else { g.fillStyle = "#46525f"; g.shadowBlur = 0; }
+  g.fillText(label, W / 2, H * 0.40);
+  g.shadowBlur = 0;
+
+  // "speaking" indicator during the spell phase
+  if (spelling) {
+    g.fillStyle = "#4cc2ff";
+    g.font = "700 34px " + MONO;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText("▶ SPEAKING", W / 2, H * 0.70);
+  }
+
+  // dot/dash symbols (hidden while speaking a whole word)
+  if (ev && !(spelling && ev.isWord)) {
+    const dotR = 28, dashW = 158, dashH = 56, gap = 42, cy = H * 0.605;
+    let total = 0;
+    for (let i = 0; i < ev.elements.length; i++) { total += ev.elements[i].sym === "." ? dotR * 2 : dashW; if (i) total += gap; }
+    let x = W / 2 - total / 2;
+    for (const e of ev.elements) {
+      const on = !spelling && rel >= e.on && rel < e.off, played = !spelling && rel >= e.off;
+      if (on) { g.fillStyle = "#ffb000"; g.shadowColor = "rgba(255,176,0,0.8)"; g.shadowBlur = 44; }
+      else { g.fillStyle = played ? "rgba(255,176,0,0.5)" : "#2a323d"; g.shadowBlur = 0; }
+      if (e.sym === ".") { g.beginPath(); g.arc(x + dotR, cy, dotR, 0, Math.PI * 2); g.fill(); x += dotR * 2; }
+      else { roundRect(g, x, cy - dashH / 2, dashW, dashH, dashH / 2); g.fill(); x += dashW; }
+      g.shadowBlur = 0;
+      x += gap;
+    }
+  }
+
+  // caption
+  const base = "400 " + layout.font + "px " + MONO, bold = "700 " + layout.font + "px " + MONO;
+  g.textAlign = "left"; g.textBaseline = "alphabetic";
+  for (const ln of layout.lines) {
+    for (const c of ln.chars) {
+      const active = c.idx === idx;
+      g.font = active ? bold : base;
+      if (active) { g.fillStyle = spelling ? "#4cc2ff" : "#ffb000"; g.shadowColor = spelling ? "rgba(76,194,255,0.5)" : "rgba(255,176,0,0.5)"; g.shadowBlur = 18; }
+      else { g.fillStyle = "#8b96a5"; g.shadowBlur = 0; }
+      g.fillText(c.ch, c.x, ln.y);
+      g.shadowBlur = 0;
+    }
+  }
+}
+
+async function recordVideo() {
+  if (isPlaying) stopPlayback();
+  if (isRecording) return;
+
+  const words = textToWords(textEl.value);
+  if (!words.length) { setStatus("Enter some text first.", "err"); return; }
+  if (typeof MediaRecorder === "undefined") { setStatus("MediaRecorder is not supported in this browser.", "err"); return; }
+
+  let mime = "";
+  for (const t of VIDEO_TYPES) { if (MediaRecorder.isTypeSupported(t)) { mime = t; break; } }
+  if (!mime) { setStatus("No supported video format for recording in this browser.", "err"); return; }
+  const ext = mime.indexOf("mp4") >= 0 ? "mp4" : "webm";
+
+  const cfg = readConfig();
+  const W = 1080, H = 1920, FPS = 30;
+  recCanvas = document.createElement("canvas");
+  recCanvas.width = W; recCanvas.height = H;
+  recCanvas.className = "rec-canvas";
+  if (!recCanvas.captureStream) { setStatus("canvas.captureStream is not supported in this browser.", "err"); recCanvas = null; return; }
+  const g = recCanvas.getContext("2d");
+
+  // show the canvas in place of the live stage so the user watches the recording
+  stage.style.display = "none";
+  stage.parentNode.appendChild(recCanvas);
+
+  // audio graph: oscillator (tones) + buffer sources (speech) -> (speakers + recorder)
+  const AC = window.AudioContext || window.webkitAudioContext;
+  recCtx = new AC();
+  try { await recCtx.resume(); } catch (e) {}
+  recOsc = recCtx.createOscillator();
+  const gain = recCtx.createGain();
+  recOsc.type = "sine";
+  recOsc.frequency.setValueAtTime(cfg.freq, recCtx.currentTime);
+  gain.gain.setValueAtTime(0, recCtx.currentTime);
+  const streamDest = recCtx.createMediaStreamDestination();
+  recOsc.connect(gain);
+  gain.connect(streamDest);
+  gain.connect(recCtx.destination);
+
+  const sg = recCtx.createGain();
+  sg.gain.value = Math.min(1, cfg.volume * 1.2);
+  sg.connect(streamDest);
+  sg.connect(recCtx.destination);
+
+  const mode = speakMode();
+  let buffers = {};
+  if (mode !== "off") {
+    setStatus("Loading audio…");
+    try { buffers = await decodeAssignments(recCtx, words, mode); } catch (e) {}
+  }
+  const p = planFor(words, cfg, buffers);
+  const letters = p.letters;
+  const layout = layoutCaption(g, W, H, buildCaptionWords(letters));
+
+  const startAt = recCtx.currentTime + 0.2;          // brief lead-in
+  scheduleTones(gain.gain, p, startAt, cfg.volume);
+  recSpeech = scheduleSpeech(recCtx, sg, buffers, p, startAt);
+  const endAt = startAt + p.duration;
+
+  // combine video + audio tracks
+  const stream = recCanvas.captureStream(FPS);
+  stream.addTrack(streamDest.stream.getAudioTracks()[0]);
+
+  const chunks = [];
+  try {
+    recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000, audioBitsPerSecond: 128_000 });
+  } catch (e) {
+    recorder = new MediaRecorder(stream, { mimeType: mime });
+  }
+  recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
+    const canceled = recCanceled;
+    cleanupRecording();
+    if (canceled) { setStatus("Recording cancelled.", "err"); return; }
+    const blob = new Blob(chunks, { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "morse-" + cfg.freq + "hz." + ext;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    const sizeStr = blob.size >= 1048576
+      ? (blob.size / 1048576).toFixed(1) + " MB"
+      : Math.round(blob.size / 1024) + " KB";
+    setStatus("Saved morse-" + cfg.freq + "hz." + ext + " · " + (endAt - startAt).toFixed(1) + "s · " + sizeStr, "ok");
+  };
+
+  recCanceled = false;
+  isRecording = true;
+  setButtons();
+  setStatus("Recording video in real time… " + (endAt - startAt).toFixed(1) + "s. Keep this tab focused.", "");
+
+  drawFrame(g, W, H, letters, layout, recCtx.currentTime, startAt, endAt); // prime first frame
+  recorder.start();
+  recOsc.start(startAt);
+  recOsc.stop(endAt + 0.1);
+
+  const loop = () => {
+    if (!isRecording) return;
+    const now = recCtx.currentTime;
+    drawFrame(g, W, H, letters, layout, now, startAt, endAt);
+    bar.style.width = Math.max(0, Math.min(1, (now - startAt) / (endAt - startAt))) * 100 + "%";
+    if (now >= endAt + 0.25) { finishRecording(); return; }
+    recRaf = requestAnimationFrame(loop);
+  };
+  recRaf = requestAnimationFrame(loop);
+}
+
+function finishRecording() {
+  if (recRaf) { cancelAnimationFrame(recRaf); recRaf = null; }
+  try { if (recorder && recorder.state !== "inactive") recorder.stop(); } catch (e) {}
+}
+
+function cancelRecording() {
+  if (!isRecording) return;
+  recCanceled = true;
+  finishRecording();
+}
+
+function cleanupRecording() {
+  isRecording = false;
+  if (recRaf) { cancelAnimationFrame(recRaf); recRaf = null; }
+  try { recOsc && recOsc.stop(); } catch (e) {}
+  for (const s of recSpeech) { try { s.stop(); } catch (e) {} }
+  recSpeech = [];
+  const old = recCtx;
+  recCtx = null; recOsc = null; recorder = null;
+  setTimeout(() => { try { old && old.close(); } catch (e) {} }, 100);
+  if (recCanvas && recCanvas.parentNode) recCanvas.parentNode.removeChild(recCanvas);
+  recCanvas = null;
+  stage.style.display = "";
+  setStagePlaceholder();
+  setTimeout(() => { bar.style.width = "0%"; }, 450);
+  setButtons();
+}
+
+function stopAll() {
+  if (isRecording) cancelRecording();
+  else stopPlayback();
+}
+
+/* ---------- UI sync ---------- */
+function refresh() {
+  const cfg = readConfig();
+  // Morse display
+  const disp = morseDisplay(textEl.value);
+  morseOut.innerHTML = disp
+    ? disp.replace(/\//g, '<span class="wsep">/</span>')
+    : '<span style="color:var(--muted)">—</span>';
+
+  // Volume label
+  volLabel.textContent = Math.round(cfg.volume * 100);
+
+  // WPM (PARIS standard: WPM = 1200 / dot_ms)
+  wpmEl.textContent = (1200 / cfg.dot).toFixed(1) + " WPM";
+
+  // Duration estimate (includes spoken letters/words when speaking is on)
+  const words = textToWords(textEl.value);
+  const mode = speakMode();
+  if (mode !== "off" && words.length) {
+    const urls = [];
+    if (mode === "words") for (const w of words) urls.push(wordURL(w.map(x => x.ch).join("")));
+    for (const w of words) for (const x of w) if (x.ch >= "A" && x.ch <= "Z") urls.push(letterURL(x.ch));
+    ensureClipDurs(urls);
+  }
+  durEl.textContent = words.length ? estimateDuration(words, cfg).toFixed(1) + " s" : "—";
+
+  // Char info (show skipped/unsupported)
+  const total = textEl.value.replace(/\s/g, "").length;
+  const supported = textEl.value.toUpperCase().replace(/\s/g, "").split("").filter(c => MORSE[c]).length;
+  charsInfo.textContent = total
+    ? supported + " of " + total + " characters supported"
+    : "";
+
+  saveState();
+}
+
+/* ---------- Persistence ---------- */
+function saveState() {
+  try {
+    const data = { text: textEl.value, speakMode: $("speakMode").value, loop: $("loop").checked };
+    cfgIds.forEach(id => data[id] = $(id).value);
+    localStorage.setItem("morse-app", JSON.stringify(data));
+  } catch (e) {}
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem("morse-app");
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (typeof data.text === "string") textEl.value = data.text;
+    if (typeof data.speakMode === "string") $("speakMode").value = data.speakMode;
+    else if (typeof data.spell === "boolean") $("speakMode").value = data.spell ? "letters" : "off";
+    if (typeof data.loop === "boolean") $("loop").checked = data.loop;
+    cfgIds.forEach(id => { if (data[id] != null) $(id).value = data[id]; });
+  } catch (e) {}
+}
+function resetDefaults() {
+  cfgIds.forEach(id => $(id).value = DEFAULTS[id]);
+  refresh();
+  setStatus("Configuration reset to defaults.", "ok");
+}
+
+/* ---------- Wire up ---------- */
+$("play").addEventListener("click", play);
+$("stop").addEventListener("click", stopAll);
+$("download").addEventListener("click", downloadWav);
+$("recordVideo").addEventListener("click", recordVideo);
+$("reset").addEventListener("click", resetDefaults);
+$("speakMode").addEventListener("change", refresh);
+$("loop").addEventListener("change", saveState);
+textEl.addEventListener("input", refresh);
+cfgIds.forEach(id => $(id).addEventListener("input", refresh));
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); play(); }
+});
+
+loadState();
+refresh();
+setStagePlaceholder();
+preloadSpoken();
+</script>
+</body>
+</html>

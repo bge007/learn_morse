@@ -1,0 +1,11 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local Claude Code / editor settings (keep launch.json, ignore machine-local prefs)
+.claude/settings.local.json
+
+# Temp TTS render artifacts (scripts convert these to .mp3 and delete them)
+spoken/**/*.wav
+words/**/*.wav
