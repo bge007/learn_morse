@@ -1,0 +1,8 @@
+{
+  "appId": "com.morsestudio.app",
+  "appName": "Morse Code Studio",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  }
+}

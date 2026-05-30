@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Morse Code Sound Generator · 700 Hz</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0e1116" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>Morse Code Studio</title>
 <style>
   :root {
     --bg: #0e1116;
@@ -223,105 +226,226 @@
 
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 26px; }
   a { color: var(--accent-2); }
+
+  /* ===================== App shell (mobile-app UI) ===================== */
+  html, body { height: 100%; }
+  body {
+    padding: 0; margin: 0; overflow: hidden; background: var(--bg);
+    overscroll-behavior: none; -webkit-tap-highlight-color: transparent;
+  }
+  .app {
+    position: relative; height: 100vh; height: 100dvh;
+    max-width: 520px; margin: 0 auto; display: flex; flex-direction: column;
+    background: radial-gradient(120% 55% at 50% -5%, #18222e 0%, var(--bg) 60%);
+    overflow: hidden;
+  }
+  .appbar {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    padding: calc(env(safe-area-inset-top) + 12px) 18px 12px;
+    font-weight: 700; font-size: 19px; letter-spacing: .3px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13,17,23,.55);
+  }
+  .appbar .dotdash { color: var(--accent); font-family: var(--mono); }
+  .screens { position: relative; flex: 1 1 auto; overflow: hidden; }
+  .screen {
+    position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 14px;
+    opacity: 0; transform: translateX(10px); pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .screen.active { opacity: 1; transform: none; pointer-events: auto; }
+  .tabbar {
+    flex: 0 0 auto; display: flex; border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom); background: rgba(13,17,23,.9);
+  }
+  .tab {
+    flex: 1; background: none; border: none; border-radius: 0; color: var(--muted);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 0 11px;
+  }
+  .tab .ico { font-size: 21px; line-height: 1; }
+  .tab.active { color: var(--accent); }
+  .tab:active:not(.active) { background: var(--panel-2); }
+
+  textarea#text { min-height: 92px; font-size: 17px; }
+  .section-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1.3px; color: var(--muted); font-weight: 700; margin: 4px 2px -2px; }
+  .actions { display: flex; gap: 12px; }
+  .actions .big { flex: 1; }
+  button.big { padding: 15px 16px; font-size: 16px; border-radius: 14px; justify-content: center; }
+  button.wide { width: 100%; justify-content: center; }
+  button.accent { background: var(--accent-2); color: #06222e; border-color: var(--accent-2); }
+  button.accent:hover:not(:disabled) { background: #6cd0ff; }
+  .toggle { margin-top: 2px; }
+
+  /* ===================== Full-screen overlays ===================== */
+  .overlay {
+    position: fixed; inset: 0; z-index: 60; background: #07090c;
+    display: flex; flex-direction: column;
+    transform: translateY(100%); visibility: hidden;
+    transition: transform .26s cubic-bezier(.2,.7,.2,1), visibility .26s;
+  }
+  .overlay.open { transform: none; visibility: visible; }
+  .overlay-top {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 4;
+    display: flex; align-items: center; gap: 12px;
+    padding: calc(env(safe-area-inset-top) + 10px) 14px 10px;
+    background: linear-gradient(#000b, #0000);
+  }
+  .overlay-title { font-weight: 600; font-size: 15px; color: #dfe7ee; }
+  .iconbtn {
+    width: 42px; height: 42px; padding: 0; border-radius: 50%; flex: 0 0 auto;
+    background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.16);
+    color: #fff; font-size: 20px; display: flex; align-items: center; justify-content: center;
+  }
+  #screen-player .player-stagewrap { position: absolute; inset: 0; display: flex; }
+  .overlay .stage { height: 100%; width: 100%; max-width: none; border: none; border-radius: 0; box-shadow: none; padding-top: calc(env(safe-area-inset-top) + 60px); }
+  .overlay .rec-canvas { height: 100%; width: 100%; max-width: none; border: none; border-radius: 0; box-shadow: none; outline: none; object-fit: contain; background: #000; }
+  .player-controls {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+    background: linear-gradient(#0000, #000d 45%);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .player-buttons { display: flex; gap: 12px; }
+  .player-buttons .big { flex: 1; }
+
+  #screen-video { background: #000; }
+  .result-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .video-actions {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+    padding: 16px 16px calc(18px + env(safe-area-inset-bottom));
+    background: linear-gradient(#0000, #000d 45%); display: flex; gap: 10px;
+  }
+  .video-actions .big { flex: 1; }
+
+  /* Toast */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom));
+    transform: translateX(-50%) translateY(12px);
+    background: rgba(28,35,45,.96); color: var(--text); border: 1px solid var(--border);
+    padding: 10px 16px; border-radius: 999px; font-size: 13px; z-index: 90;
+    opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease;
+    max-width: 90vw; text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.ok { color: var(--green); }
+  .toast.err { color: var(--red); }
+  .progress { margin-top: 0; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1><span class="dotdash">·−</span> Morse Code Sound Generator</h1>
-    <p class="sub">Type text, convert to Morse, and play it as a <b>700&nbsp;Hz</b> tone. Runs entirely in your browser.</p>
-  </header>
+<div class="app">
+  <header class="appbar"><span class="dotdash">·−</span>&nbsp;<span id="appbarTitle">Morse Code Studio</span></header>
 
-  <div class="card">
-    <h2>Input text</h2>
-    <textarea id="text" placeholder="Type a message, e.g.  HELLO WORLD" spellcheck="false">HELLO WORLD</textarea>
-    <div class="meta">
-      <span>Tip: press <b>Ctrl/Cmd&nbsp;+&nbsp;Enter</b> to play.</span>
-      <span id="charsInfo"></span>
-    </div>
-  </div>
+  <main class="screens">
+    <!-- CREATE -->
+    <section class="screen active" id="screen-compose">
+      <textarea id="text" placeholder="Type a message, e.g.  HELLO WORLD" spellcheck="false">HELLO WORLD</textarea>
+      <div id="morseOut" class="morse-out"></div>
+      <div class="meta">
+        <span>Speed <b id="wpm">—</b></span>
+        <span>Length <b id="dur">—</b></span>
+        <span id="charsInfo"></span>
+      </div>
+      <label class="toggle">🔊 Speak
+        <select id="speakMode">
+          <option value="off">Off</option>
+          <option value="letters" selected>Each letter</option>
+          <option value="words">Whole word</option>
+        </select>
+      </label>
+      <label class="toggle"><input type="checkbox" id="loop" /> 🔁 Loop <span class="toggle-note">repeat until Stop</span></label>
+      <div class="actions">
+        <button id="play" class="primary big">▶ Play</button>
+        <button id="recordVideo" class="accent big">🎬 Create Video</button>
+      </div>
+      <button id="download" class="ghost wide">⤓ Save audio (.wav)</button>
+    </section>
 
-  <div class="card">
-    <h2>Morse output</h2>
-    <div id="morseOut" class="morse-out"></div>
-    <div class="meta">
-      <span>Speed: <b id="wpm">—</b></span>
-      <span>Total duration: <b id="dur">—</b></span>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Configuration</h2>
-    <div class="grid">
-      <div class="field">
-        <div class="name"><span>Tone frequency</span><span class="unit">Hz</span></div>
-        <input type="number" id="freq" value="700" min="20" max="12000" step="1" />
-      </div>
-      <div class="field">
-        <div class="name"><span>Dot duration</span><span class="unit">ms</span></div>
-        <input type="number" id="dot" value="92" min="1" step="1" />
-      </div>
-      <div class="field">
-        <div class="name"><span>Dash duration</span><span class="unit">ms</span></div>
-        <input type="number" id="dash" value="277" min="1" step="1" />
-      </div>
-      <div class="field">
-        <div class="name"><span>Gap between sounds</span><span class="unit">ms</span></div>
-        <input type="number" id="gapElement" value="92" min="0" step="1" />
-      </div>
-      <div class="field">
-        <div class="name"><span>Gap between letters</span><span class="unit">ms</span></div>
-        <input type="number" id="gapLetter" value="277" min="0" step="1" />
-      </div>
-      <div class="field">
-        <div class="name"><span>Gap between words</span><span class="unit">ms</span></div>
-        <input type="number" id="gapWord" value="645" min="0" step="1" />
-      </div>
-      <div class="field">
-        <div class="name"><span>Volume</span><span class="unit"><span id="volLabel">70</span>%</span></div>
-        <input type="range" id="volume" value="0.7" min="0" max="1" step="0.01" />
-      </div>
-    </div>
-    <div class="hint">Defaults follow standard Morse timing at this dot length (dot = 1 unit, dash = 3 units, letter gap = 3 units, word gap = 7 units).</div>
-  </div>
-
-  <div class="card">
-    <h2>Playback</h2>
-    <div class="controls">
-      <button id="play" class="primary">▶ Play</button>
-      <button id="stop" class="danger" disabled>■ Stop</button>
-      <button id="download" class="ghost">⤓ Download .wav</button>
-      <button id="recordVideo" class="ghost">🎬 Generate video (9:16)</button>
-      <button id="reset" class="ghost">↺ Reset defaults</button>
-    </div>
-    <label class="toggle">🔊 Speak
-      <select id="speakMode">
-        <option value="off">Off</option>
-        <option value="letters" selected>Each letter (on change)</option>
-        <option value="words">Whole word</option>
-      </select>
-      <span class="toggle-note">before its Morse — words use clips in spoken/words/ (else fall back to letters)</span>
-    </label>
-    <label class="toggle"><input type="checkbox" id="loop" /> 🔁 Loop <span class="toggle-note">— repeat until you press Stop</span></label>
-    <div class="progress"><div id="bar"></div></div>
-    <div id="status" class="status"></div>
-  </div>
-
-  <div class="card">
-    <h2>Now transmitting · 9:16</h2>
-    <div class="stage-wrap">
-      <div id="stage" class="stage">
-        <div class="stage-main">
-          <div id="stageChar" class="stage-char">·−</div>
-          <div id="stageSymbols" class="stage-symbols"></div>
+    <!-- SETTINGS -->
+    <section class="screen" id="screen-settings">
+      <div class="section-label">Tone &amp; timing</div>
+      <div class="grid">
+        <div class="field">
+          <div class="name"><span>Tone frequency</span><span class="unit">Hz</span></div>
+          <input type="number" id="freq" value="700" min="20" max="12000" step="1" />
         </div>
-        <div id="stageCaption" class="stage-caption"></div>
+        <div class="field">
+          <div class="name"><span>Dot duration</span><span class="unit">ms</span></div>
+          <input type="number" id="dot" value="92" min="1" step="1" />
+        </div>
+        <div class="field">
+          <div class="name"><span>Dash duration</span><span class="unit">ms</span></div>
+          <input type="number" id="dash" value="277" min="1" step="1" />
+        </div>
+        <div class="field">
+          <div class="name"><span>Gap between sounds</span><span class="unit">ms</span></div>
+          <input type="number" id="gapElement" value="92" min="0" step="1" />
+        </div>
+        <div class="field">
+          <div class="name"><span>Gap between letters</span><span class="unit">ms</span></div>
+          <input type="number" id="gapLetter" value="277" min="0" step="1" />
+        </div>
+        <div class="field">
+          <div class="name"><span>Gap between words</span><span class="unit">ms</span></div>
+          <input type="number" id="gapWord" value="645" min="0" step="1" />
+        </div>
+        <div class="field">
+          <div class="name"><span>Volume</span><span class="unit"><span id="volLabel">70</span>%</span></div>
+          <input type="range" id="volume" value="0.7" min="0" max="1" step="0.01" />
+        </div>
       </div>
+      <div class="hint">Defaults follow standard Morse timing (dot = 1 unit, dash = 3, letter gap = 3, word gap = 7).</div>
+      <button id="reset" class="ghost wide">↺ Reset to defaults</button>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-screen="screen-compose" data-title="Morse Code Studio"><span class="ico">✎</span>Create</button>
+    <button class="tab" data-screen="screen-settings" data-title="Settings"><span class="ico">⚙</span>Settings</button>
+  </nav>
+</div>
+
+<!-- PLAYER (full-screen) -->
+<section class="overlay" id="screen-player">
+  <div class="player-stagewrap" id="playerStageWrap">
+    <div id="stage" class="stage">
+      <div class="stage-main">
+        <div id="stageChar" class="stage-char">·−</div>
+        <div id="stageSymbols" class="stage-symbols"></div>
+      </div>
+      <div id="stageCaption" class="stage-caption"></div>
     </div>
   </div>
+  <div class="overlay-top">
+    <button class="iconbtn" id="playerClose">✕</button>
+    <div class="overlay-title">Now transmitting</div>
+  </div>
+  <div class="player-controls">
+    <div class="progress"><div id="bar"></div></div>
+    <div class="player-buttons">
+      <button id="replay" class="ghost big">▶ Replay</button>
+      <button id="stop" class="danger big" disabled>■ Stop</button>
+    </div>
+  </div>
+</section>
 
-  <footer>Single static file — works offline. Uses the Web Audio API.</footer>
-</div>
+<!-- VIDEO RESULT (full-screen) -->
+<section class="overlay" id="screen-video">
+  <video id="resultVideo" class="result-video" playsinline webkit-playsinline loop controls></video>
+  <div class="overlay-top">
+    <button class="iconbtn" id="videoClose">✕</button>
+    <div class="overlay-title">Your video · 9:16</div>
+  </div>
+  <div class="video-actions">
+    <button id="videoReplay" class="ghost big">↻ Replay</button>
+    <button id="videoSave" class="primary big">⤓ Save / Share</button>
+  </div>
+</section>
+
+<div class="toast" id="status"></div>
 
 <script>
 "use strict";
@@ -350,6 +474,7 @@ const wpmEl = $("wpm");
 const durEl = $("dur");
 const volLabel = $("volLabel");
 const charsInfo = $("charsInfo");
+const stage = $("stage");
 const stageChar = $("stageChar");
 const stageSymbols = $("stageSymbols");
 const stageCaption = $("stageCaption");
@@ -627,9 +752,14 @@ let loopOn = false, iterStart = 0, iterLen = 0, scheduledIter = 0, loopVol = 0, 
 const LOOP_GAP = 1.0;   // pause between repeats when looping
 function loopEnabled() { const c = $("loop"); return c ? c.checked : false; }
 
+let toastTimer = null;
 function setStatus(msg, kind) {
   statusEl.textContent = msg || "";
-  statusEl.className = "status" + (kind ? " " + kind : "");
+  statusEl.className = "toast" + (kind ? " " + kind : "");
+  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+  if (!msg) { statusEl.classList.remove("show"); return; }
+  statusEl.classList.add("show");
+  toastTimer = setTimeout(() => statusEl.classList.remove("show"), 2800);
 }
 function setButtons() {
   const busy = isPlaying || isRecording;
@@ -638,7 +768,8 @@ function setButtons() {
   $("play").textContent = isPlaying ? "▶ Restart" : "▶ Play";
   $("download").disabled = busy;
   $("recordVideo").disabled = busy;
-  $("recordVideo").textContent = isRecording ? "● Recording…" : "🎬 Generate video (9:16)";
+  $("recordVideo").textContent = isRecording ? "● Recording…" : "🎬 Create Video";
+  const rp = $("replay"); if (rp) rp.disabled = isRecording;
 }
 
 async function play() {
@@ -1168,17 +1299,21 @@ async function recordVideo() {
   recorder.onstop = () => {
     const canceled = recCanceled;
     cleanupRecording();
-    if (canceled) { setStatus("Recording cancelled.", "err"); return; }
+    if (canceled) { hideOverlay(); setStatus("Recording cancelled.", "err"); return; }
     const blob = new Blob(chunks, { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "morse-" + cfg.freq + "hz." + ext;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    if (lastVideoURL) { try { URL.revokeObjectURL(lastVideoURL); } catch (e) {} }
+    lastVideoBlob = blob; lastVideoMime = mime; lastVideoExt = ext;
+    lastVideoName = "morse-" + cfg.freq + "hz." + ext;
+    lastVideoURL = URL.createObjectURL(blob);
+    const v = $("resultVideo");
+    v.src = lastVideoURL;
+    showOverlay("video");                       // present the result full-screen
+    v.currentTime = 0;
+    v.play().catch(() => {});
     const sizeStr = blob.size >= 1048576
       ? (blob.size / 1048576).toFixed(1) + " MB"
       : Math.round(blob.size / 1024) + " KB";
-    setStatus("Saved morse-" + cfg.freq + "hz." + ext + " · " + (endAt - startAt).toFixed(1) + "s · " + sizeStr, "ok");
+    setStatus("Video ready · " + (endAt - startAt).toFixed(1) + "s · " + sizeStr, "ok");
   };
 
   recCanceled = false;
@@ -1233,6 +1368,71 @@ function cleanupRecording() {
 function stopAll() {
   if (isRecording) cancelRecording();
   else stopPlayback();
+}
+
+/* ---------- App navigation (screens + full-screen overlays) ---------- */
+let overlayName = null;   // null | "player" | "video"
+let lastVideoBlob = null, lastVideoURL = null, lastVideoMime = "", lastVideoExt = "", lastVideoName = "";
+
+function switchTab(screenId, title) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === screenId));
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.screen === screenId));
+  if (title) $("appbarTitle").textContent = title;
+}
+
+function renderOverlay() {
+  $("screen-player").classList.toggle("open", overlayName === "player");
+  $("screen-video").classList.toggle("open", overlayName === "video");
+}
+function showOverlay(name) {
+  const wasOpen = overlayName !== null;
+  overlayName = name;
+  renderOverlay();
+  if (!wasOpen) history.pushState({ ov: true }, "");   // one entry so hardware Back closes it
+}
+function closeOverlayImmediate() {
+  if (overlayName === null) return;
+  if (isRecording) cancelRecording();
+  else if (isPlaying) stopPlayback();
+  if (overlayName === "video") {
+    const v = $("resultVideo");
+    try { v.pause(); } catch (e) {}
+    v.removeAttribute("src"); try { v.load(); } catch (e) {}
+    if (lastVideoURL) { try { URL.revokeObjectURL(lastVideoURL); } catch (e) {} lastVideoURL = null; }
+  }
+  overlayName = null;
+  renderOverlay();
+}
+function hideOverlay() {
+  if (overlayName === null) return;
+  if (history.state && history.state.ov) history.back();   // -> popstate -> closeOverlayImmediate
+  else closeOverlayImmediate();
+}
+window.addEventListener("popstate", () => { if (overlayName !== null) closeOverlayImmediate(); });
+
+function startPlay() {
+  if (!textToWords(textEl.value).length) { setStatus("Enter some text first.", "err"); return; }
+  showOverlay("player");
+  play();
+}
+function startRecord() {
+  if (!textToWords(textEl.value).length) { setStatus("Enter some text first.", "err"); return; }
+  showOverlay("player");
+  recordVideo();
+}
+
+async function saveVideo() {
+  if (!lastVideoBlob) return;
+  try {
+    if (navigator.canShare) {
+      const file = new File([lastVideoBlob], lastVideoName, { type: lastVideoMime });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: lastVideoName }); return; }
+    }
+  } catch (e) { /* cancelled/unsupported -> fall through to download */ }
+  const a = document.createElement("a");
+  a.href = lastVideoURL; a.download = lastVideoName;
+  document.body.appendChild(a); a.click(); a.remove();
+  setStatus("Saved " + lastVideoName, "ok");
 }
 
 /* ---------- UI sync ---------- */
@@ -1298,17 +1498,32 @@ function resetDefaults() {
 }
 
 /* ---------- Wire up ---------- */
-$("play").addEventListener("click", play);
-$("stop").addEventListener("click", stopAll);
+// Tabs
+document.querySelectorAll(".tab").forEach(t =>
+  t.addEventListener("click", () => switchTab(t.dataset.screen, t.dataset.title)));
+
+// Compose actions
+$("play").addEventListener("click", startPlay);
+$("recordVideo").addEventListener("click", startRecord);
 $("download").addEventListener("click", downloadWav);
-$("recordVideo").addEventListener("click", recordVideo);
 $("reset").addEventListener("click", resetDefaults);
 $("speakMode").addEventListener("change", refresh);
 $("loop").addEventListener("change", saveState);
+
+// Player overlay
+$("stop").addEventListener("click", stopAll);
+$("replay").addEventListener("click", play);
+$("playerClose").addEventListener("click", hideOverlay);
+
+// Video overlay
+$("videoClose").addEventListener("click", hideOverlay);
+$("videoReplay").addEventListener("click", () => { const v = $("resultVideo"); v.currentTime = 0; v.play().catch(() => {}); });
+$("videoSave").addEventListener("click", saveVideo);
+
 textEl.addEventListener("input", refresh);
 cfgIds.forEach(id => $(id).addEventListener("input", refresh));
 document.addEventListener("keydown", e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); play(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); startPlay(); }
 });
 
 loadState();
