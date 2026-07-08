@@ -42,6 +42,9 @@ It runs as a single, dependency-free web app (`index.html`) and is also packaged
   - *Whole word* — after a word's Morse, the word is spoken.
 - **Voice picker** — choose any Text-to-Speech voice installed on the system
   (male / female / regional variants such as English (India)); persisted.
+- **Speak order (⇅ Order)** — choose whether each letter/word is spoken **after**
+  its Morse (default — hear the code, then the answer) or **before** it
+  (hear the name, then the code); persisted.
 - **9:16 animated display** synced to the audio (amber while keyed, blue while spoken).
 - **Loop** — repeat the whole message until stopped.
 - **Export:** `.wav` (offline render) and a **1080×1920 `.mp4`** (H.264/AAC via

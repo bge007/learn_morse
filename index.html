@@ -373,6 +373,12 @@
       <label class="toggle">🗣 Voice
         <select id="voice"><option value="">Auto (English)</option></select>
       </label>
+      <label class="toggle">⇅ Order
+        <select id="speakOrder">
+          <option value="after" selected>Morse first, then speak</option>
+          <option value="before">Speak first, then Morse</option>
+        </select>
+      </label>
       <label class="toggle"><input type="checkbox" id="loop" /> 🔁 Loop <span class="toggle-note">repeat until Stop</span></label>
       <div class="actions">
         <button id="play" class="primary big">▶ Play</button>
@@ -596,6 +602,7 @@ if (ttsSupported()) {
 }
 
 function speakMode() { const s = $("speakMode"); return s ? s.value : "off"; }
+function speakOrder() { const s = $("speakOrder"); return s ? s.value : "after"; }
 
 // Speaking-time estimate (s); measured durations override it once known.
 function ttsDur(label, isWord) {
@@ -668,13 +675,15 @@ function speakAssignments(words, mode) {
 const SPOKEN_GAP = 0.12;   // silence between a spoken letter and its Morse
 
 // Build the full playback plan in offsets from 0. Each letter plays its Morse
-// elements first, then optionally a spoken clip (letter name or whole word)
-// after a short gap. getSpeak(i) returns null | { url, label, isWord, dur }.
+// elements and, optionally, a spoken utterance (letter name or whole word) —
+// before or after the Morse, per the ⇅ Order setting, with SPOKEN_GAP between.
+// getSpeak(i) returns null | { label, isWord, dur }.
 // Returns { letters:[{ch,code,isWordEnd,spell,isWord,speakLabel,
 //           spokenStart,spokenDur,morseStart,elements:[{sym,on,off}],start,end,until}], duration }.
 function buildPlan(words, cfg, getSpeak) {
   const dot = cfg.dot / 1000, dash = cfg.dash / 1000;
   const eg = cfg.gapElement / 1000, lg = cfg.gapLetter / 1000, wg = cfg.gapWord / 1000;
+  const speakFirst = speakOrder() === "before";
   let t = 0, flat = 0;
   const letters = [];
   for (let wi = 0; wi < words.length; wi++) {
@@ -684,6 +693,9 @@ function buildPlan(words, cfg, getSpeak) {
       const start = t;
       const sp = getSpeak ? getSpeak(flat) : null;
       const spell = !!(sp && sp.dur > 0);
+      const spokenDur = spell ? sp.dur : 0;
+      let spokenStart = t;
+      if (spell && speakFirst) { spokenStart = t; t += spokenDur + SPOKEN_GAP; }
       const morseStart = t;
       const elements = [];
       for (let ei = 0; ei < code.length; ei++) {
@@ -692,9 +704,7 @@ function buildPlan(words, cfg, getSpeak) {
         t += d;
         if (ei < code.length - 1) t += eg;
       }
-      const spokenDur = spell ? sp.dur : 0;
-      const spokenStart = spell ? t + SPOKEN_GAP : t;
-      if (spell) t += SPOKEN_GAP + spokenDur;
+      if (spell && !speakFirst) { spokenStart = t + SPOKEN_GAP; t += SPOKEN_GAP + spokenDur; }
       letters.push({ ch, code, isWordEnd: li === word.length - 1,
                      spell, isWord: spell ? !!sp.isWord : false,
                      speakLabel: spell ? sp.label : null,
@@ -947,7 +957,7 @@ function updateStage(now) {
   if (idx < 0) { if (curIdx !== -1) setStagePlaceholder(); return; }
   if (idx !== curIdx) { renderEvent(idx); curIdx = idx; }
   const ev = timeline[idx];
-  const spelling = ev.spell && rel >= ev.spokenStart && rel < ev.spokenStart + ev.spokenDur; // speaking after Morse
+  const spelling = ev.spell && rel >= ev.spokenStart && rel < ev.spokenStart + ev.spokenDur; // inside the spoken window (either order)
   const label = spelling ? ev.speakLabel : ev.ch;
   if (stageChar.textContent !== label) stageChar.textContent = label;
   fitCharFont(label, spelling && ev.isWord);
@@ -1418,7 +1428,7 @@ function refresh() {
 function saveState() {
   try {
     const data = { text: textEl.value, speakMode: $("speakMode").value, loop: $("loop").checked,
-                   voice: $("voice").value };
+                   voice: $("voice").value, speakOrder: $("speakOrder").value };
     cfgIds.forEach(id => data[id] = $(id).value);
     localStorage.setItem("morse-app", JSON.stringify(data));
   } catch (e) {}
@@ -1433,6 +1443,7 @@ function loadState() {
     else if (typeof data.spell === "boolean") $("speakMode").value = data.spell ? "letters" : "off";
     if (typeof data.loop === "boolean") $("loop").checked = data.loop;
     if (typeof data.voice === "string" && data.voice) $("voice").dataset.want = data.voice;
+    if (data.speakOrder === "before" || data.speakOrder === "after") $("speakOrder").value = data.speakOrder;
     cfgIds.forEach(id => { if (data[id] != null) $(id).value = data[id]; });
   } catch (e) {}
 }
@@ -1453,6 +1464,7 @@ $("recordVideo").addEventListener("click", startRecord);
 $("download").addEventListener("click", downloadWav);
 $("reset").addEventListener("click", resetDefaults);
 $("speakMode").addEventListener("change", refresh);
+$("speakOrder").addEventListener("change", refresh);
 $("voice").addEventListener("change", () => {
   delete $("voice").dataset.want;
   for (const k in ttsMeasured) delete ttsMeasured[k];  // durations differ per voice

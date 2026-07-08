@@ -276,7 +276,7 @@ These are design decisions baked deeply into the codebase. Violating them will b
 
 4. **`buildPlan()` produces time offsets from zero.** A `startAt` value is added when scheduling. Keep this separation — it allows the same plan to be reused for loops and exports.
 
-5. **Speech plays AFTER Morse, not before.** `spokenStart = endOfMorse + SPOKEN_GAP`. The `updateStage()` animation reflects this: `spelling` is true only during `[spokenStart, spokenStart + spokenDur)`.
+5. **Speech order is configurable (⇅ Order), default AFTER Morse.** `buildPlan()` reads `speakOrder()`: "after" gives `spokenStart = endOfMorse + SPOKEN_GAP`; "before" places the spoken window first and starts the Morse `SPOKEN_GAP` after it ends. The `updateStage()` animation is order-agnostic: `spelling` is true during `[spokenStart, spokenStart + spokenDur)` wherever that window sits.
 
 6. **WAV export and video export use the same plan/schedule functions as live playback.** If you change `buildPlan` or `scheduleTones`, test all three output modes. Exports carry the Morse tones only — TTS cannot render offline, so the speech windows are silent in exported files by design.
 
@@ -493,6 +493,24 @@ deleted: `spoken/` (26 letter + word MP3s), `words/`, `abcd.mp3`, `gen_letters.p
 `gen_words.ps1`, and `split_words.py`. `copy-web.mjs` now copies only `index.html`
 into `www/`, and the README and this document were rewritten to describe the TTS
 architecture. ffmpeg/Python/pydub are no longer prerequisites for anything.
+
+---
+
+### Prompt 12 — Speak-order swap option
+
+> *"Can you include a new option for changing the sequence (swap option) of alphabet/text sound and the morse code."*
+
+A **⇅ Order** dropdown was added below the Voice selector with two choices,
+persisted in localStorage:
+
+- *Morse first, then speak* (default — matches the Prompt 5 behavior)
+- *Speak first, then Morse* (the original upstream sequence)
+
+`buildPlan()` now branches on `speakOrder()`: in "before" mode the spoken window
+is laid out first and the Morse starts `SPOKEN_GAP` after it; in "after" mode the
+Morse plays first as before. The stage animation needed no changes — it colors
+the letter blue during `[spokenStart, spokenStart + spokenDur)` regardless of
+where that window falls.
 
 ---
 
