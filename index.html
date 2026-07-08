@@ -104,6 +104,7 @@
   .toggle input { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
   .toggle select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; font-size: 13.5px; cursor: pointer; outline: none; }
   .toggle select:focus { border-color: var(--accent-2); }
+  #voice { max-width: 75%; overflow: hidden; text-overflow: ellipsis; }
   .toggle-note { color: var(--muted); font-size: 12.5px; }
   button {
     border: 1px solid var(--border);
@@ -124,6 +125,15 @@
   button.primary:hover:not(:disabled) { background: #ffc23d; }
   button.danger { color: var(--red); border-color: #43242c; }
   button.ghost { background: transparent; }
+  button.small { padding: 4px 10px; font-size: 12px; border-radius: 7px; }
+
+  .input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .input-label { font-size: 13px; color: var(--muted); }
 
   .progress {
     height: 8px; background: var(--panel-2); border: 1px solid var(--border);
@@ -342,6 +352,10 @@
   <main class="screens">
     <!-- CREATE -->
     <section class="screen active" id="screen-compose">
+      <div class="input-header">
+        <span class="input-label">Message</span>
+        <button id="fillAZ" class="ghost small" title="Fill with A–Z alphabet">A–Z</button>
+      </div>
       <textarea id="text" placeholder="Type a message, e.g.  HELLO WORLD" spellcheck="false">HELLO WORLD</textarea>
       <div id="morseOut" class="morse-out"></div>
       <div class="meta">
@@ -355,6 +369,9 @@
           <option value="letters" selected>Each letter</option>
           <option value="words">Whole word</option>
         </select>
+      </label>
+      <label class="toggle">🗣 Voice
+        <select id="voice"><option value="">Auto (English)</option></select>
       </label>
       <label class="toggle"><input type="checkbox" id="loop" /> 🔁 Loop <span class="toggle-note">repeat until Stop</span></label>
       <div class="actions">
@@ -528,95 +545,110 @@ function morseDisplay(text) {
     .join("   /   ");
 }
 
-/* ---------- Spoken audio: speak letters or whole words before Morse ---------- */
-const LETTER_BASE = "spoken/";
-const WORD_BASE = "spoken/words/";
-const clipRaw = {};     // url -> ArrayBuffer | null  (fetch attempted)
-const clipDur = {};     // url -> trimmed duration (s)  (>0 means clip exists & usable)
-const clipTried = {};   // url -> true  (metadata decode attempted)
-let metaCtx = null;
+/* ---------- Spoken audio: browser Text-to-Speech (Web Speech API) ---------- */
+// Speech is synthesized live via speechSynthesis — no audio files are needed.
+// Utterances cannot be scheduled on an AudioContext, so they are queued with
+// absolute audio-clock times and fired from the animation loop. Exports (WAV /
+// video) therefore contain the Morse tones only; the plan still reserves the
+// same silent windows so live and exported timing match.
+const TTS_RATE = 1.0;
+let ttsVoice = null;
+const ttsMeasured = {};   // label -> real duration (s), learned on first speak
+
+function ttsSupported() { return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window; }
+
+// Resolve the active voice: the user's pick from the Voice select when
+// available, otherwise a sensible English default.
+function pickVoice() {
+  if (!ttsSupported()) return;
+  const vs = speechSynthesis.getVoices();
+  if (!vs.length) return;
+  const sel = $("voice");
+  const want = sel ? sel.value : "";
+  ttsVoice = (want && vs.find(v => v.name === want))
+          || vs.find(v => /^en/i.test(v.lang) && v.default)
+          || vs.find(v => /^en/i.test(v.lang))
+          || vs[0];
+}
+
+// Fill the Voice select with every voice installed on the system
+// (e.g. male/female variants, English (India), other languages).
+// Voices load asynchronously in most browsers, so this re-runs on
+// voiceschanged; a saved-but-not-yet-loaded pick waits in dataset.want.
+function populateVoices() {
+  const sel = $("voice");
+  if (!sel || !ttsSupported()) return;
+  const vs = speechSynthesis.getVoices();
+  const want = sel.dataset.want || sel.value;
+  sel.innerHTML = '<option value="">Auto (English)</option>';
+  for (const v of vs) {
+    const o = document.createElement("option");
+    o.value = v.name;
+    o.textContent = v.name + " — " + v.lang;
+    sel.appendChild(o);
+  }
+  if (want && vs.some(v => v.name === want)) { sel.value = want; delete sel.dataset.want; }
+  pickVoice();
+}
+if (ttsSupported()) {
+  populateVoices();
+  try { speechSynthesis.onvoiceschanged = populateVoices; } catch (e) {}
+}
 
 function speakMode() { const s = $("speakMode"); return s ? s.value : "off"; }
-function letterURL(ch) { return LETTER_BASE + ch.toLowerCase() + ".mp3"; }
-function wordKey(text) { return text.toLowerCase().replace(/[^a-z0-9]+/g, ""); }
-function wordURL(text) { return WORD_BASE + wordKey(text) + ".mp3"; }
-function clipAvail(url) { return clipDur[url] > 0; }
-function metaContext() {
-  if (!metaCtx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) { try { metaCtx = new AC(); } catch (e) {} } }
-  return metaCtx;
+
+// Speaking-time estimate (s); measured durations override it once known.
+function ttsDur(label, isWord) {
+  const m = ttsMeasured[label];
+  if (m > 0) return m;
+  return isWord ? Math.min(2.5, 0.45 + 0.075 * label.length) : 0.6;
 }
 
-// Trim leading/trailing near-silence and normalize, so spoken clips are tight and
-// roughly as loud as the Morse tone (raw TTS has ~0.8s trailing silence, low level).
-function trimBuffer(ac, buf, thresh = 0.02, padPre = 0.03, padPost = 0.08, target = 0.9) {
-  const d = buf.getChannelData(0);
-  let first = -1, last = -1, peak = 0;
-  for (let i = 0; i < d.length; i++) {
-    const a = Math.abs(d[i]);
-    if (a > peak) peak = a;
-    if (a > thresh) { if (first < 0) first = i; last = i; }
-  }
-  if (first < 0) return buf;                 // all silence — leave untouched
-  const sr = buf.sampleRate;
-  const s = Math.max(0, first - Math.floor(padPre * sr));
-  const e = Math.min(d.length, last + Math.floor(padPost * sr));
-  const gain = peak > 0 ? Math.min(8, target / peak) : 1;
-  const out = ac.createBuffer(1, e - s, sr);
-  const od = out.getChannelData(0);
-  for (let i = s; i < e; i++) od[i - s] = d[i] * gain;
-  return out;
+// Speak `label` now; record its real duration so later plans are accurate.
+function speakTTS(label) {
+  if (!ttsSupported()) return;
+  const u = new SpeechSynthesisUtterance(label);
+  if (ttsVoice) u.voice = ttsVoice;
+  u.rate = TTS_RATE;
+  let t0 = 0;
+  u.onstart = () => { t0 = performance.now(); };
+  u.onend = () => {
+    if (!t0) return;
+    const d = (performance.now() - t0) / 1000;
+    if (d > 0.05 && d < 10 && !ttsMeasured[label]) { ttsMeasured[label] = d; refresh(); }
+  };
+  try { speechSynthesis.speak(u); } catch (e) {}
 }
 
-async function fetchClip(url) {
-  if (url in clipRaw) return clipRaw[url];
-  try { const res = await fetch(url); clipRaw[url] = res.ok ? await res.arrayBuffer() : null; }
-  catch (e) { clipRaw[url] = null; }
-  return clipRaw[url];
+/* ---------- TTS queue: fire utterances at plan times off the audio clock ---------- */
+let ttsQueue = [];   // [{at, label}] absolute AudioContext times, sorted
+
+function queueSpeech(plan, startAt) {
+  for (const L of plan.letters)
+    if (L.spell && L.speakLabel) ttsQueue.push({ at: startAt + L.spokenStart, label: L.speakLabel });
+  ttsQueue.sort((a, b) => a.at - b.at);
+}
+function pumpSpeech(now) {
+  while (ttsQueue.length && ttsQueue[0].at <= now) speakTTS(ttsQueue.shift().label);
+}
+function clearSpeechQueue() {
+  ttsQueue = [];
+  if (ttsSupported()) { try { speechSynthesis.cancel(); } catch (e) {} }
 }
 
-// Decode (fetch + trim) one clip for the given context; records its duration.
-async function decodeClip(ac, url) {
-  const raw = await fetchClip(url);
-  if (!raw) return null;
-  try { const b = trimBuffer(ac, await ac.decodeAudioData(raw.slice(0))); clipDur[url] = b.duration; return b; }
-  catch (e) { return null; }
-}
-
-// Learn durations/availability of the given urls on a shared (suspended) context,
-// so the estimate is accurate and the cache is warm. Refreshes the UI when new.
-async function ensureClipDurs(urls) {
-  const ac = metaContext(); if (!ac) return;
-  let changed = false;
-  for (const url of urls) {
-    if (clipTried[url]) continue;
-    clipTried[url] = true;
-    if (await decodeClip(ac, url)) changed = true;
-  }
-  if (changed) refresh();
-}
-
-// Preload all A–Z letter clips up front.
-function preloadSpoken() {
-  const urls = [];
-  for (let i = 0; i < 26; i++) urls.push(letterURL(String.fromCharCode(65 + i)));
-  ensureClipDurs(urls);
-}
-
-// Per-letter (reading order) speak assignment for the current mode: null | {url,label,isWord}.
+// Per-letter (reading order) speak assignment for the current mode: null | {label,isWord}.
 // Letters: speak a letter when it changes from the previous character.
-// Words: speak the whole word (on change); if no word clip exists, fall back to
-// spelling that word's letters (on change within the word).
+// Words: speak the whole word (on change). TTS can speak anything, so digits
+// and punctuation are announced too — no per-clip availability checks needed.
 function speakAssignments(words, mode) {
   let n = 0; for (const w of words) n += w.length;
   const out = new Array(n).fill(null);
-  if (mode === "off") return out;
+  if (mode === "off" || !ttsSupported()) return out;
 
   if (mode === "letters") {
     let prev = null, i = 0;
     for (const w of words) for (const x of w) {
-      const url = letterURL(x.ch);
-      if (x.ch >= "A" && x.ch <= "Z" && x.ch !== prev && clipAvail(url))
-        out[i] = { url, label: x.ch, isWord: false };
+      if (x.ch !== prev) out[i] = { label: x.ch, isWord: false };
       prev = x.ch; i++;
     }
     return out;
@@ -626,41 +658,19 @@ function speakAssignments(words, mode) {
   let prevWord = null, i = 0;
   for (const w of words) {
     const text = w.map(x => x.ch).join("");
-    const url = wordURL(text);
-    if (clipAvail(url)) {
-      if (text !== prevWord) out[i] = { url, label: text, isWord: true };
-    } else {
-      let prevCh = null, j = i;                  // no word clip -> spell its letters
-      for (const x of w) {
-        const lu = letterURL(x.ch);
-        if (x.ch >= "A" && x.ch <= "Z" && x.ch !== prevCh && clipAvail(lu))
-          out[j] = { url: lu, label: x.ch, isWord: false };
-        prevCh = x.ch; j++;
-      }
-    }
+    if (text !== prevWord) out[i] = { label: text, isWord: true };
     prevWord = text; i += w.length;
   }
   return out;
 }
 
-// Decode every clip referenced by the current mode into the playback context.
-async function decodeAssignments(ac, words, mode) {
-  if (mode === "off") return {};
-  const urls = new Set();
-  if (mode === "words") for (const w of words) urls.add(wordURL(w.map(x => x.ch).join("")));
-  for (const w of words) for (const x of w) if (x.ch >= "A" && x.ch <= "Z") urls.add(letterURL(x.ch));
-  const buffers = {};
-  await Promise.all([...urls].map(async u => { const b = await decodeClip(ac, u); if (b) buffers[u] = b; }));
-  return buffers;
-}
-
 /* ---------- Scheduling / timeline ---------- */
 const SPOKEN_GAP = 0.12;   // silence between a spoken letter and its Morse
 
-// Build the full playback plan in offsets from 0. Each letter may begin with a
-// spoken clip (a letter name or a whole word), per getSpeak(flatIndex), followed
-// by its Morse elements. getSpeak(i) returns null | { url, label, isWord, dur }.
-// Returns { letters:[{ch,code,isWordEnd,spell,isWord,speakLabel,speakUrl,
+// Build the full playback plan in offsets from 0. Each letter plays its Morse
+// elements first, then optionally a spoken clip (letter name or whole word)
+// after a short gap. getSpeak(i) returns null | { url, label, isWord, dur }.
+// Returns { letters:[{ch,code,isWordEnd,spell,isWord,speakLabel,
 //           spokenStart,spokenDur,morseStart,elements:[{sym,on,off}],start,end,until}], duration }.
 function buildPlan(words, cfg, getSpeak) {
   const dot = cfg.dot / 1000, dash = cfg.dash / 1000;
@@ -674,9 +684,6 @@ function buildPlan(words, cfg, getSpeak) {
       const start = t;
       const sp = getSpeak ? getSpeak(flat) : null;
       const spell = !!(sp && sp.dur > 0);
-      const spokenStart = t;
-      const spokenDur = spell ? sp.dur : 0;
-      if (spell) t += spokenDur + SPOKEN_GAP;
       const morseStart = t;
       const elements = [];
       for (let ei = 0; ei < code.length; ei++) {
@@ -685,9 +692,12 @@ function buildPlan(words, cfg, getSpeak) {
         t += d;
         if (ei < code.length - 1) t += eg;
       }
+      const spokenDur = spell ? sp.dur : 0;
+      const spokenStart = spell ? t + SPOKEN_GAP : t;
+      if (spell) t += SPOKEN_GAP + spokenDur;
       letters.push({ ch, code, isWordEnd: li === word.length - 1,
                      spell, isWord: spell ? !!sp.isWord : false,
-                     speakLabel: spell ? sp.label : null, speakUrl: spell ? sp.url : null,
+                     speakLabel: spell ? sp.label : null,
                      spokenStart, spokenDur, morseStart, elements, start, end: t });
       flat++;
       if (li < word.length - 1) t += lg;
@@ -699,21 +709,19 @@ function buildPlan(words, cfg, getSpeak) {
   return { letters, duration: t };
 }
 
-// Build the plan for the current text + speak mode. `buffers` (url->AudioBuffer),
-// when present, gives exact clip durations; otherwise known clipDur is used.
-function planFor(words, cfg, buffers) {
+// Build the plan for the current text + speak mode. Spoken durations come from
+// TTS estimates, refined by measured durations after the first playback.
+function planFor(words, cfg) {
   const assignments = speakAssignments(words, speakMode());
-  const durFn = url => (buffers && buffers[url] ? buffers[url].duration : (clipDur[url] || 0));
   const getSpeak = i => {
     const a = assignments[i];
     if (!a) return null;
-    const d = durFn(a.url);
-    return d > 0 ? { url: a.url, label: a.label, isWord: a.isWord, dur: d } : null;
+    return { label: a.label, isWord: a.isWord, dur: ttsDur(a.label, a.isWord) };
   };
   return buildPlan(words, cfg, getSpeak);
 }
 
-function estimateDuration(words, cfg) { return planFor(words, cfg, null).duration; }
+function estimateDuration(words, cfg) { return planFor(words, cfg).duration; }
 
 // Schedule the Morse tone envelope (gating a running oscillator) for the plan.
 function scheduleTones(gainParam, plan, startAt, vol) {
@@ -728,27 +736,11 @@ function scheduleTones(gainParam, plan, startAt, vol) {
   }
 }
 
-// Schedule the spoken clips; returns the source nodes (so they can be stopped).
-function scheduleSpeech(ac, dest, buffers, plan, startAt) {
-  const sources = [];
-  for (const L of plan.letters) {
-    if (!L.spell || !L.speakUrl) continue;
-    const buf = buffers[L.speakUrl];
-    if (!buf) continue;
-    const src = ac.createBufferSource();
-    src.buffer = buf;
-    src.connect(dest);
-    src.start(startAt + L.spokenStart);
-    sources.push(src);
-  }
-  return sources;
-}
-
 /* ---------- Live playback ---------- */
-let ctx = null, osc = null, gainNode = null, speechGain = null, spokenSources = [];
+let ctx = null, osc = null, gainNode = null;
 let isPlaying = false, rafId = null, playStart = 0, playEnd = 0, plan = null;
 let timeline = [], stageSpans = [], curIdx = -1;
-let loopOn = false, iterStart = 0, iterLen = 0, scheduledIter = 0, loopVol = 0, loopBuffers = {};
+let loopOn = false, iterStart = 0, iterLen = 0, scheduledIter = 0, loopVol = 0;
 const LOOP_GAP = 1.0;   // pause between repeats when looping
 function loopEnabled() { const c = $("loop"); return c ? c.checked : false; }
 
@@ -784,17 +776,9 @@ async function play() {
 
   ctx = new AC();
   try { await ctx.resume(); } catch (e) {}
-
-  // Load + decode the spoken clips we may need (letters and/or words).
-  const mode = speakMode();
-  let buffers = {};
-  if (mode !== "off") {
-    setStatus("Loading audio…");
-    try { buffers = await decodeAssignments(ctx, words, mode); } catch (e) { buffers = {}; }
-  }
   if (!ctx) return; // stopped while awaiting
 
-  plan = planFor(words, cfg, buffers);
+  plan = planFor(words, cfg);
   timeline = plan.letters;
   buildCaption();
   curIdx = -1;
@@ -807,21 +791,16 @@ async function play() {
   osc.connect(gainNode);
   gainNode.connect(ctx.destination);
 
-  speechGain = ctx.createGain();
-  speechGain.gain.value = Math.min(1, cfg.volume * 1.2);
-  speechGain.connect(ctx.destination);
-
   playStart = ctx.currentTime + 0.12;
   loopOn = loopEnabled();
   loopVol = cfg.volume;
-  loopBuffers = buffers;
   iterStart = playStart;
   iterLen = plan.duration + LOOP_GAP;
   scheduledIter = 0;
-  spokenSources = [];
 
+  clearSpeechQueue();
   scheduleTones(gainNode.gain, plan, playStart, cfg.volume);   // first pass
-  trackSpeech(scheduleSpeech(ctx, speechGain, buffers, plan, playStart));
+  queueSpeech(plan, playStart);
   playEnd = playStart + plan.duration;
 
   osc.start(playStart);
@@ -837,7 +816,7 @@ async function play() {
   const nSpeak = plan.letters.filter(l => l.spell).length;
   setStatus((loopOn ? "Looping… " : "Playing… ") + (playEnd - playStart).toFixed(1) + "s" +
             (loopOn ? "/pass" : "") +
-            (nSpeak ? " · speaking " + nSpeak + " clip" + (nSpeak > 1 ? "s" : "") : ""), "ok");
+            (nSpeak ? " · speaking " + nSpeak + " (TTS)" : ""), "ok");
   bar.style.width = "0%";
   rafTick();
 }
@@ -845,6 +824,7 @@ async function play() {
 function rafTick() {
   if (!isPlaying || !ctx) return;
   const now = ctx.currentTime;
+  pumpSpeech(now);                               // fire due TTS utterances
   if (loopOn) {
     const curIter = Math.max(0, Math.floor((now - playStart) / iterLen));
     iterStart = playStart + curIter * iterLen;
@@ -852,7 +832,7 @@ function rafTick() {
       scheduledIter++;
       const at = playStart + scheduledIter * iterLen;
       scheduleTones(gainNode.gain, plan, at, loopVol);
-      trackSpeech(scheduleSpeech(ctx, speechGain, loopBuffers, plan, at));
+      queueSpeech(plan, at);
     }
     bar.style.width = Math.max(0, Math.min(1, (now - iterStart) / plan.duration)) * 100 + "%";
     updateStage(now);
@@ -866,18 +846,6 @@ function rafTick() {
   }
 }
 
-function trackSpeech(srcs) {
-  for (const s of srcs) {
-    spokenSources.push(s);
-    s.onended = () => { const i = spokenSources.indexOf(s); if (i >= 0) spokenSources.splice(i, 1); };
-  }
-}
-
-function stopSpokenSources() {
-  for (const s of spokenSources) { try { s.onended = null; s.stop(); } catch (e) {} }
-  spokenSources = [];
-}
-
 function stopPlayback() {
   if (!ctx) return;
   try {
@@ -887,7 +855,7 @@ function stopPlayback() {
     gainNode.gain.linearRampToValueAtTime(0, now + 0.01);
     osc.stop(now + 0.03);
   } catch (e) {}
-  stopSpokenSources();
+  clearSpeechQueue();
   finishPlayback(true);
 }
 
@@ -897,12 +865,12 @@ function finishPlayback(stopped) {
   loopOn = false;
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
-  stopSpokenSources();
+  clearSpeechQueue();
   setButtons();
   setStatus(stopped === true ? "Stopped." : "Done.", "ok");
   setStagePlaceholder();
   const old = ctx;
-  ctx = osc = gainNode = speechGain = null;
+  ctx = osc = gainNode = null;
   setTimeout(() => { try { old && old.close(); } catch (e) {} }, 80);
   setTimeout(() => { bar.style.width = "0%"; }, 450);
 }
@@ -979,7 +947,7 @@ function updateStage(now) {
   if (idx < 0) { if (curIdx !== -1) setStagePlaceholder(); return; }
   if (idx !== curIdx) { renderEvent(idx); curIdx = idx; }
   const ev = timeline[idx];
-  const spelling = ev.spell && rel < ev.morseStart;   // speaking the letter/word, before its Morse
+  const spelling = ev.spell && rel >= ev.spokenStart && rel < ev.spokenStart + ev.spokenDur; // speaking after Morse
   const label = spelling ? ev.speakLabel : ev.ch;
   if (stageChar.textContent !== label) stageChar.textContent = label;
   fitCharFont(label, spelling && ev.isWord);
@@ -1036,16 +1004,11 @@ async function downloadWav() {
   setStatus("Rendering WAV…");
   const sr = 44100;
   const mode = speakMode();
-  // Generous upper bound for the buffer length (trimmed exactly after render).
-  const morseOnly = buildPlan(words, cfg, null).duration;
-  const letterCount = words.reduce((n, w) => n + w.length, 0);
-  const speechUB = mode === "off" ? 0 : letterCount * 2.2 + words.length * 2.5;
-  const len = Math.ceil((morseOnly + speechUB + 1.0) * sr);
+  // TTS speech cannot be rendered offline — the WAV carries the Morse tones only,
+  // with the same silent windows the live TTS speech occupies.
+  const p = planFor(words, cfg);
+  const len = Math.ceil((p.duration + 1.0) * sr);
   const octx = new OAC(1, len, sr);
-
-  let buffers = {};
-  if (mode !== "off") { try { buffers = await decodeAssignments(octx, words, mode); } catch (e) {} }
-  const p = planFor(words, cfg, buffers);
 
   const o = octx.createOscillator();
   const g = octx.createGain();
@@ -1055,13 +1018,8 @@ async function downloadWav() {
   o.connect(g);
   g.connect(octx.destination);
 
-  const sg = octx.createGain();
-  sg.gain.value = Math.min(1, cfg.volume * 1.2);
-  sg.connect(octx.destination);
-
   const startOff = 0.02;
   scheduleTones(g.gain, p, startOff, cfg.volume);
-  scheduleSpeech(octx, sg, buffers, p, startOff);
   o.start(0);
   o.stop(startOff + p.duration + 0.05);
 
@@ -1077,7 +1035,8 @@ async function downloadWav() {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus("Saved morse-" + cfg.freq + "hz.wav (" + p.duration.toFixed(1) + "s).", "ok");
+    setStatus("Saved morse-" + cfg.freq + "hz.wav (" + p.duration.toFixed(1) + "s)" +
+              (mode !== "off" ? " · tones only (TTS speech is live-only)" : "") + ".", "ok");
   } catch (e) {
     setStatus("WAV render failed: " + e.message, "err");
   }
@@ -1085,7 +1044,7 @@ async function downloadWav() {
 
 /* ---------- Video generation (9:16 canvas + audio -> MediaRecorder) ---------- */
 let isRecording = false, recorder = null, recCtx = null, recOsc = null,
-    recRaf = null, recCanceled = false, recCanvas = null, recSpeech = [];
+    recRaf = null, recCanceled = false, recCanvas = null;
 
 const VIDEO_TYPES = [
   'video/mp4;codecs="avc1.640028,mp4a.40.2"',
@@ -1265,24 +1224,14 @@ async function recordVideo() {
   gain.connect(streamDest);
   gain.connect(recCtx.destination);
 
-  const sg = recCtx.createGain();
-  sg.gain.value = Math.min(1, cfg.volume * 1.2);
-  sg.connect(streamDest);
-  sg.connect(recCtx.destination);
-
-  const mode = speakMode();
-  let buffers = {};
-  if (mode !== "off") {
-    setStatus("Loading audio…");
-    try { buffers = await decodeAssignments(recCtx, words, mode); } catch (e) {}
-  }
-  const p = planFor(words, cfg, buffers);
+  const p = planFor(words, cfg);
   const letters = p.letters;
   const layout = layoutCaption(g, W, H, buildCaptionWords(letters));
 
   const startAt = recCtx.currentTime + 0.2;          // brief lead-in
   scheduleTones(gain.gain, p, startAt, cfg.volume);
-  recSpeech = scheduleSpeech(recCtx, sg, buffers, p, startAt);
+  clearSpeechQueue();
+  queueSpeech(p, startAt);   // TTS is audible live; the recorded file has tones only
   const endAt = startAt + p.duration;
 
   // combine video + audio tracks
@@ -1329,6 +1278,7 @@ async function recordVideo() {
   const loop = () => {
     if (!isRecording) return;
     const now = recCtx.currentTime;
+    pumpSpeech(now);
     drawFrame(g, W, H, letters, layout, now, startAt, endAt);
     bar.style.width = Math.max(0, Math.min(1, (now - startAt) / (endAt - startAt))) * 100 + "%";
     if (now >= endAt + 0.25) { finishRecording(); return; }
@@ -1352,8 +1302,7 @@ function cleanupRecording() {
   isRecording = false;
   if (recRaf) { cancelAnimationFrame(recRaf); recRaf = null; }
   try { recOsc && recOsc.stop(); } catch (e) {}
-  for (const s of recSpeech) { try { s.stop(); } catch (e) {} }
-  recSpeech = [];
+  clearSpeechQueue();
   const old = recCtx;
   recCtx = null; recOsc = null; recorder = null;
   setTimeout(() => { try { old && old.close(); } catch (e) {} }, 100);
@@ -1450,15 +1399,9 @@ function refresh() {
   // WPM (PARIS standard: WPM = 1200 / dot_ms)
   wpmEl.textContent = (1200 / cfg.dot).toFixed(1) + " WPM";
 
-  // Duration estimate (includes spoken letters/words when speaking is on)
+  // Duration estimate (includes spoken letters/words when speaking is on;
+  // TTS durations are estimated, then refined after the first playback)
   const words = textToWords(textEl.value);
-  const mode = speakMode();
-  if (mode !== "off" && words.length) {
-    const urls = [];
-    if (mode === "words") for (const w of words) urls.push(wordURL(w.map(x => x.ch).join("")));
-    for (const w of words) for (const x of w) if (x.ch >= "A" && x.ch <= "Z") urls.push(letterURL(x.ch));
-    ensureClipDurs(urls);
-  }
   durEl.textContent = words.length ? estimateDuration(words, cfg).toFixed(1) + " s" : "—";
 
   // Char info (show skipped/unsupported)
@@ -1474,7 +1417,8 @@ function refresh() {
 /* ---------- Persistence ---------- */
 function saveState() {
   try {
-    const data = { text: textEl.value, speakMode: $("speakMode").value, loop: $("loop").checked };
+    const data = { text: textEl.value, speakMode: $("speakMode").value, loop: $("loop").checked,
+                   voice: $("voice").value };
     cfgIds.forEach(id => data[id] = $(id).value);
     localStorage.setItem("morse-app", JSON.stringify(data));
   } catch (e) {}
@@ -1488,6 +1432,7 @@ function loadState() {
     if (typeof data.speakMode === "string") $("speakMode").value = data.speakMode;
     else if (typeof data.spell === "boolean") $("speakMode").value = data.spell ? "letters" : "off";
     if (typeof data.loop === "boolean") $("loop").checked = data.loop;
+    if (typeof data.voice === "string" && data.voice) $("voice").dataset.want = data.voice;
     cfgIds.forEach(id => { if (data[id] != null) $(id).value = data[id]; });
   } catch (e) {}
 }
@@ -1508,6 +1453,13 @@ $("recordVideo").addEventListener("click", startRecord);
 $("download").addEventListener("click", downloadWav);
 $("reset").addEventListener("click", resetDefaults);
 $("speakMode").addEventListener("change", refresh);
+$("voice").addEventListener("change", () => {
+  delete $("voice").dataset.want;
+  for (const k in ttsMeasured) delete ttsMeasured[k];  // durations differ per voice
+  pickVoice();
+  refresh();
+  speakTTS("Hello");        // quick audible sample of the selected voice
+});
 $("loop").addEventListener("change", saveState);
 
 // Player overlay
@@ -1520,6 +1472,10 @@ $("videoClose").addEventListener("click", hideOverlay);
 $("videoReplay").addEventListener("click", () => { const v = $("resultVideo"); v.currentTime = 0; v.play().catch(() => {}); });
 $("videoSave").addEventListener("click", saveVideo);
 
+$("fillAZ").addEventListener("click", () => {
+  textEl.value = "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z";
+  refresh();
+});
 textEl.addEventListener("input", refresh);
 cfgIds.forEach(id => $(id).addEventListener("input", refresh));
 document.addEventListener("keydown", e => {
@@ -1527,9 +1483,9 @@ document.addEventListener("keydown", e => {
 });
 
 loadState();
+if (ttsSupported()) populateVoices();   // re-apply a saved voice pick after loadState
 refresh();
 setStagePlaceholder();
-preloadSpoken();
 </script>
 </body>
 </html>
