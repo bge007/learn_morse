@@ -75,11 +75,14 @@ Then open **http://localhost:8753/** in your browser.
    - *Whole word* — after the whole word's code plays, the word is spoken
    Digits and punctuation are announced too (TTS can speak anything).
 
-   **Important:** The speech plays **after** the Morse code, not before. This was a deliberate change from the original design (see history below).
-
 3b. **Voice picker** — a Voice dropdown lists every TTS voice installed on the
    system (male/female/regional variants). The pick persists in localStorage;
    *Auto (English)* selects the system's default English voice.
+
+3c. **Speak order (⇅ Order)** — chooses whether each letter/word is spoken
+   **after** its Morse (default) or **before** it. Persists in localStorage.
+   The default (after) was a deliberate change from the original speak-first
+   design; this option lets you have it either way (see history below).
 
 4. **A–Z quick-fill button** — a small "A–Z" button sits above the text input. Clicking it fills the textarea with `A B C D E F G H I J K L M N O P Q R S T U V W X Y Z` (space-separated so each letter is treated as its own word, with word-gap pauses between them). This is the fastest way to practice the full alphabet.
 
@@ -107,11 +110,11 @@ Understanding this is important before changing anything related to timing or au
 **`buildPlan(words, cfg, getSpeak)` is the heart of the timing system.** It takes the parsed words, the current config, and a function that supplies speech info for each letter position, and returns a flat timeline of letter objects. Each letter object records:
 - `morseStart` — when the Morse keying begins (in seconds from t=0)
 - `elements` — each dot/dash with its exact `on` and `off` times
-- `spokenStart` — when the spoken utterance starts (always after the Morse is done)
+- `spokenStart` — when the spoken utterance starts (before or after the Morse, per ⇅ Order)
 - `spokenDur` — how long the speech lasts (estimated, refined once measured)
 - `start`, `end`, `until` — the letter's overall time window
 
-The gap between Morse end and speech start is `SPOKEN_GAP = 0.12 s`.
+The gap between the Morse and the speech (on whichever side) is `SPOKEN_GAP = 0.12 s`.
 
 **The animation is driven by `AudioContext.currentTime`**, not by timers. A `requestAnimationFrame` loop reads the audio clock, finds the current letter via binary search, and updates the display. This keeps the visual perfectly in sync with the audio.
 
@@ -145,8 +148,10 @@ The app uses a mobile-first shell layout with a fixed header, scrollable content
       textarea#text                 ← the message input
       #morseOut                     ← live dot/dash preview
       .meta                         ← WPM, duration, character count
-      speakMode select              ← Off / Each letter / Whole word
-      loop checkbox
+      #speakMode select             ← 🔊 Speak: Off / Each letter / Whole word
+      #voice select                 ← 🗣 Voice: Auto (English) + all system TTS voices
+      #speakOrder select            ← ⇅ Order: Morse first / Speak first
+      #loop checkbox
       #play button                  ← opens player overlay
       #recordVideo button           ← opens player overlay + records
       #download button              ← saves .wav
@@ -236,6 +241,8 @@ All settings are saved automatically to `localStorage` under the key `"morse-app
 {
   "text": "HELLO WORLD",
   "speakMode": "letters",
+  "voice": "Microsoft Zira - English (United States)",
+  "speakOrder": "after",
   "loop": false,
   "freq": 700,
   "dot": 92,
@@ -247,6 +254,8 @@ All settings are saved automatically to `localStorage` under the key `"morse-app
 }
 ```
 This is loaded on page start, so the user's last message and settings are restored.
+(`voice` may be empty for Auto; a saved voice that hasn't loaded yet waits in the
+select's `dataset.want` until `voiceschanged` fires. `speakOrder` is `"after"` or `"before"`.)
 
 ---
 
@@ -521,7 +530,8 @@ where that window falls.
 | `textToWords(text)` | Splits text into words → letters, filters unknown chars |
 | `morseDisplay(text)` | Returns human-readable dot/dash string for the display panel |
 | `speakAssignments(words, mode)` | Returns a flat array of speech assignments (one per letter position) |
-| `buildPlan(words, cfg, getSpeak)` | Builds the complete timing timeline; returns `{letters, duration}` |
+| `speakMode()` / `speakOrder()` | Read the 🔊 Speak mode / ⇅ Order selects |
+| `buildPlan(words, cfg, getSpeak)` | Builds the complete timing timeline (respects speak order); returns `{letters, duration}` |
 | `scheduleTones(gainParam, plan, startAt, vol)` | Gates the oscillator for each Morse element |
 | `ttsDur(label, isWord)` | Speaking-time estimate; measured durations override it |
 | `speakTTS(label)` | Speaks via `speechSynthesis`; measures and caches real duration |
@@ -531,4 +541,4 @@ where that window falls.
 | `updateStage(now)` | Animation frame handler — syncs display to audio clock |
 | `refresh()` | Redraws the Morse display and recalculates duration estimate |
 | `readConfig()` | Reads all settings inputs and returns a config object |
-| `saveState()` / `loadState()` | localStorage persistence (incl. voice pick) |
+| `saveState()` / `loadState()` | localStorage persistence (incl. voice pick + speak order) |
