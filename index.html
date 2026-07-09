@@ -132,8 +132,10 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 6px;
+    gap: 8px;
   }
   .input-label { font-size: 13px; color: var(--muted); }
+  .fill-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 
   .progress {
     height: 8px; background: var(--panel-2); border: 1px solid var(--border);
@@ -357,7 +359,13 @@
     <section class="screen active" id="screen-compose">
       <div class="input-header">
         <span class="input-label">Message</span>
-        <button id="fillAZ" class="ghost small" title="Fill with A–Z alphabet">A–Z</button>
+        <span class="fill-row">
+          <button class="ghost small fill" data-fill="HELLO WORLD" title="Hello World">HW</button>
+          <button class="ghost small fill" data-fill="E I S H" title="Dots drill: E I S H">E–H</button>
+          <button class="ghost small fill" data-fill="E A W J" title="Dot-to-dash drill: E A W J">E–J</button>
+          <button class="ghost small fill" data-fill="T M O" title="Dashes drill: T M O">T–O</button>
+          <button id="fillAZ" class="ghost small fill" data-fill="A B C D E F G H I J K L M N O P Q R S T U V W X Y Z" title="Fill with A–Z alphabet">A–Z</button>
+        </span>
       </div>
       <textarea id="text" placeholder="Type a message, e.g.  HELLO WORLD" spellcheck="false">HELLO WORLD</textarea>
       <div id="morseOut" class="morse-out"></div>
@@ -430,7 +438,7 @@
   </main>
 
   <nav class="tabbar">
-    <button class="tab active" data-screen="screen-compose" data-title="Morse Code Studio"><span class="ico">✎</span>Create</button>
+    <button class="tab active" data-screen="screen-compose" data-title="Morse Code Studio"><span class="ico">🎯</span>Practice</button>
     <button class="tab" data-screen="screen-settings" data-title="Settings"><span class="ico">⚙</span>Settings</button>
   </nav>
 </div>
@@ -1532,10 +1540,10 @@ $("videoClose").addEventListener("click", hideOverlay);
 $("videoReplay").addEventListener("click", () => { const v = $("resultVideo"); v.currentTime = 0; v.play().catch(() => {}); });
 $("videoSave").addEventListener("click", saveVideo);
 
-$("fillAZ").addEventListener("click", () => {
-  textEl.value = "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z";
+document.querySelectorAll(".fill").forEach(b => b.addEventListener("click", () => {
+  textEl.value = b.dataset.fill;
   refresh();
-});
+}));
 textEl.addEventListener("input", refresh);
 cfgIds.forEach(id => $(id).addEventListener("input", refresh));
 document.addEventListener("keydown", e => {

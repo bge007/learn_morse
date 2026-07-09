@@ -11,7 +11,7 @@ for any browser on Windows / Linux / macOS, and the same file packaged as a nati
 **Android app** (Capacitor) with a tabbed, full-screen mobile UI. iOS needs only
 `npx cap add ios` on a Mac.
 
-**Current version: 1.3** (Android `versionCode 4`).
+**Current version: 1.4** (Android `versionCode 5`).
 
 - **Web app:** open `index.html` over a local HTTP server.
 - **Android app:** build it yourself (see
@@ -39,8 +39,10 @@ for any browser on Windows / Linux / macOS, and the same file packaged as a nati
 - **Text → Morse → sound** via the Web Audio API; a clean sine tone with click-free edges.
 - **Adjustable timing & tone:** frequency (700 Hz), dot (92 ms) and dash (277 ms)
   durations, and the gaps between elements, letters, and words. Live WPM + total duration.
-- **A–Z practice button** — fills the message with all 26 letters (space-separated,
-  so each letter gets a word gap) for alphabet drills.
+- **Practice presets** — one-tap fill buttons above the message box:
+  **HW** (HELLO WORLD), **E–H** (E I S H — the dots drill), **E–J** (E A W J —
+  dot-to-dash drill), **T–O** (T M O — the dashes drill), and **A–Z** (all 26
+  letters, space-separated so each gets a word gap).
 - **Spoken letters and words** via live Text-to-Speech — no audio files. Native OS
   speech engine inside the Android app, `speechSynthesis` in browsers:
   - *Each letter (on change)* — a letter's name is spoken alongside its Morse
@@ -52,12 +54,12 @@ for any browser on Windows / Linux / macOS, and the same file packaged as a nati
   its Morse (default — hear the code, then the answer) or **before** it
   (hear the name, then the code); persisted.
 - **9:16 animated display** synced to the audio (amber while keyed, blue while spoken),
-  with a height-capped scrolling Morse preview on the Create screen.
+  with a height-capped scrolling Morse preview on the Practice screen.
 - **Loop** — repeat the whole message until stopped.
 - **Export:** `.wav` (offline render) and a **1080×1920 `.mp4`** (H.264/AAC via
   MediaRecorder). Exports contain the Morse tones (TTS speech is live-only; its
   timing windows are preserved as silence).
-- **Android app:** Create / Settings tabs (speech + timing options live under
+- **Android app:** Practice / Settings tabs (speech + timing options live under
   Settings), a full-screen player, and a full-screen video result screen;
   hardware-back aware.
 

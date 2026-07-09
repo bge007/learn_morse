@@ -2,7 +2,7 @@
 
 This document is the single source of truth for any AI assistant or developer forking or continuing work on this project. It describes what the app does, how it is built, what changes have been made from the original source, and the full history of the prompts that shaped the current version. Read the whole thing before making changes.
 
-**Current version: 1.3** (Android `versionCode 4`) — repository: https://github.com/bge007/learn_morse
+**Current version: 1.4** (Android `versionCode 5`) — repository: https://github.com/bge007/learn_morse
 
 ---
 
@@ -86,7 +86,15 @@ Then open **http://localhost:8753/** in your browser.
    The default (after) was a deliberate change from the original speak-first
    design; this option lets you have it either way (see history below).
 
-4. **A–Z quick-fill button** — a small "A–Z" button sits above the text input. Clicking it fills the textarea with `A B C D E F G H I J K L M N O P Q R S T U V W X Y Z` (space-separated so each letter is treated as its own word, with word-gap pauses between them). This is the fastest way to practice the full alphabet.
+4. **Practice preset buttons** — a row of small fill buttons sits above the text
+   input; clicking one replaces the message (all share the `.fill` class and a
+   `data-fill` attribute; one generic handler fills the textarea and refreshes):
+   - **HW** → `HELLO WORLD`
+   - **E–H** → `E I S H` (the dots drill: · ·· ··· ····)
+   - **E–J** → `E A W J` (dot-to-dash drill: · ·− ·−− ·−−−)
+   - **T–O** → `T M O` (the dashes drill: − −− −−−)
+   - **A–Z** → all 26 letters, space-separated so each letter is its own word
+     with word-gap pauses between them — the fastest full-alphabet drill.
 
 5. **Loop mode** — a checkbox that repeats the message indefinitely until Stop is pressed.
 
@@ -101,8 +109,8 @@ Then open **http://localhost:8753/** in your browser.
 
 9. **Settings tab** — two sections: **Speech** (Speak mode, Voice, Order) and
    **Tone & timing** (frequency, durations, gaps, volume) with a Reset button.
-   The Create screen stays minimal: message + A–Z, scrolling Morse preview
-   (max-height 26vh), stats, Loop, and the Play / Video / WAV buttons.
+   The Practice screen stays minimal: message + preset chips, scrolling Morse
+   preview (max-height 26vh), stats, Loop, and the Play / Video / WAV buttons.
 
 ---
 
@@ -146,10 +154,11 @@ The app uses a mobile-first shell layout with a fixed header, scrollable content
 .app
   .appbar                          title bar ("·− Morse Code Studio")
   .screens
-    #screen-compose  (Create tab)
+    #screen-compose  (Practice tab)
       .input-header
         .input-label  "Message"
-        #fillAZ  button             ← A–Z quick-fill
+        .fill-row                   ← practice preset chips
+          HW | E–H | E–J | T–O | #fillAZ (A–Z)
       textarea#text                 ← the message input
       #morseOut                     ← live dot/dash preview
       .meta                         ← WPM, duration, character count
@@ -166,7 +175,7 @@ The app uses a mobile-first shell layout with a fixed header, scrollable content
         inputs: freq, dot, dash, gapElement, gapLetter, gapWord, volume
         #reset button
 
-  .tabbar                          Create tab | Settings tab
+  .tabbar                          🎯 Practice tab | ⚙ Settings tab
 
 Full-screen overlays (slide up from bottom):
   #screen-player                   ← live playback view
@@ -589,6 +598,21 @@ section; the `index.html` line count was stale (~1,400 lines); and a current-ver
 statement was added to both files. (Between the numbered feature prompts there were
 also routine "update GitHub" requests and APK builds for v1.1–v1.3, recorded in the
 git history rather than here.)
+
+---
+
+### Prompt 16 — Practice tab and preset drill buttons
+
+> *"Change 'Create' button to 'Practice' with appropriate icon. Add 'HW' button for 'Hello World', 'E-H' for 'E I S H', 'E-J' for 'E A W J', 'T-O' for 'T M O' in the textarea and morse code in morseOut..."*
+
+- The bottom-bar tab was renamed **✎ Create → 🎯 Practice** (same `data-screen`
+  and `data-title`, so the app bar still shows "Morse Code Studio").
+- The single A–Z button became a wrapping `.fill-row` of five preset chips:
+  HW / E–H / E–J / T–O / A–Z. Each is a `.fill` button carrying its message in
+  `data-fill`; one generic handler replaces the textarea content and refreshes
+  the Morse preview. E–H, E–J, and T–O are classic Koch-style progressions
+  (all-dots, dot-to-dash, all-dashes).
+- Version bumped to **1.4 (versionCode 5)**.
 
 ---
 

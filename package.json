@@ -1,6 +1,6 @@
 {
   "name": "morse-code-studio",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Morse Code Studio — Android app (Capacitor WebView wrapper around index.html)",
   "scripts": {
