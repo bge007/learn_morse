@@ -172,17 +172,25 @@ cd android && ./gradlew assembleRelease
 
 ## Speech (Text-to-Speech)
 
-Speech is generated live by the **Web Speech API** (`speechSynthesis`) — there are no
-audio files to generate or ship.
+Speech is generated live — there are no audio files to generate or ship. One speech
+abstraction picks the right backend per platform at runtime:
 
-- The **Voice** dropdown on the Create tab lists every TTS voice installed on the
-  system (e.g. male/female variants, English (India), other languages). The choice
-  is persisted in `localStorage`.
-- **Auto (English)** picks the system's default English voice.
+| Platform | Backend |
+|---|---|
+| Android / iOS app | `@capacitor-community/text-to-speech` → native OS speech engine |
+| Windows / Linux / macOS browsers | Web Speech API (`speechSynthesis`) |
+
+The native plugin is required on Android because the **Android System WebView does
+not implement the Web Speech API** (Chrome does; a WebView shell doesn't).
+
+- The **Voice** dropdown on the Create tab lists every TTS voice the backend offers
+  (e.g. male/female variants, English (India), other languages). The choice is
+  persisted in `localStorage`.
+- **Auto (English)** picks the default English voice.
 - Utterance durations are estimated up front and refined with measured durations
   after the first playback, so the timeline stays accurate.
-- On Android, the WebView uses the device's TTS engine (usually Google TTS), so the
-  available voices depend on the device's installed speech data.
+- On Android, voices come from the device's TTS engine (usually Google TTS) —
+  install more voices via Settings → Accessibility → Text-to-speech output.
 
 ---
 
@@ -227,10 +235,13 @@ Defaults follow standard Morse ratios at a 92 ms dot (≈ 13 WPM).
 
 ## Troubleshooting
 
-- **No speech:** check that the browser supports the Web Speech API
-  (all modern browsers do) and that the Speak mode isn't *Off*. On Android, make
-  sure a TTS engine with English voices is installed (Settings → Accessibility →
-  Text-to-speech).
+- **No speech (browser):** check that the browser supports the Web Speech API
+  (all modern browsers do) and that the Speak mode isn't *Off*.
+- **No speech (Android app):** make sure a TTS engine with English voices is
+  installed (Settings → Accessibility → Text-to-speech output). Speech in the app
+  uses the native engine via a Capacitor plugin — if you built the APK yourself,
+  run `npm install` and `npx cap sync android` before `gradlew assembleDebug` so
+  the plugin is bundled.
 - **Voice list is empty at first:** voices load asynchronously; the list fills a
   moment after the page opens (the app re-populates on `voiceschanged`).
 - **Gradle can't find the SDK:** set `ANDROID_HOME` or create `android/local.properties`

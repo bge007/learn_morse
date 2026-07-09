@@ -261,9 +261,17 @@ select's `dataset.want` until `voiceschanged` fires. `speakOrder` is `"after"` o
 
 ## Speech (Text-to-Speech)
 
-Speech is synthesized live by the browser's Web Speech API — there are no audio
-files to generate, commit, or ship. The Voice dropdown lists every installed system
-voice; on Android the WebView uses the device's TTS engine (usually Google TTS).
+Speech is synthesized live — no audio files to generate, commit, or ship. One
+abstraction (`nativeTTS()` / `webTTS()` in index.html) picks the backend at runtime:
+
+- **Android/iOS app:** `@capacitor-community/text-to-speech` plugin → native OS
+  speech engine. Required because the Android WebView does NOT implement the
+  Web Speech API (Chrome does; WebView doesn't).
+- **Browsers (Windows/Linux/macOS):** standard `speechSynthesis`.
+
+The Voice dropdown lists whatever voices the active backend offers, unified as
+`{name, lang, index}` in `ttsVoices`. When adding the plugin to a fresh checkout:
+`npm install` then `npx cap sync android` before building the APK.
 
 After changing the web app, re-sync and rebuild the APK:
 ```powershell
@@ -523,6 +531,29 @@ where that window falls.
 
 ---
 
+### Prompt 13 — Fix TTS in the APK with a cross-platform speech backend
+
+> *"This works in windows computer, however TTS is not working in the APK version. Can you update to a common framework of the application to work seamlessly in most common device architecture such as Android, iOS, Windows, Linux etc."*
+
+Root cause: the **Android System WebView does not implement the Web Speech API**
+(Chrome on Android does; a WebView shell doesn't) — the very reason the original
+app shipped MP3 clips. The app already sits on a cross-platform framework
+(Capacitor: Android + iOS + any browser), so the fix was a speech backend
+abstraction, not a rewrite:
+
+- Installed `@capacitor-community/text-to-speech@5.1.0` (Capacitor 6 compatible).
+- `index.html` now has `nativeTTS()` (Capacitor plugin, used inside the app) and
+  `webTTS()` (`speechSynthesis`, used in browsers); `speakTTS`, `loadVoices`,
+  `populateVoices`, `pickVoice`, and `clearSpeechQueue` all route through it.
+- Voices are unified as `{name, lang, index}`; the native path measures utterance
+  duration via the plugin's speak() promise, the web path via onstart/onend.
+- Version bumped to **1.2 (versionCode 3)**; `MorseCodeStudio-v1.2-debug.apk`
+  built with the plugin registered (verified in assets/capacitor.plugins.json).
+- iOS support would be `npx cap add ios` on a Mac — the same speech layer works
+  there via AVSpeechSynthesizer.
+
+---
+
 ## Quick Reference — Key Functions
 
 | Function | What It Does |
@@ -533,8 +564,10 @@ where that window falls.
 | `speakMode()` / `speakOrder()` | Read the 🔊 Speak mode / ⇅ Order selects |
 | `buildPlan(words, cfg, getSpeak)` | Builds the complete timing timeline (respects speak order); returns `{letters, duration}` |
 | `scheduleTones(gainParam, plan, startAt, vol)` | Gates the oscillator for each Morse element |
+| `nativeTTS()` / `webTTS()` | Backend detection: Capacitor plugin (app) vs speechSynthesis (browser) |
 | `ttsDur(label, isWord)` | Speaking-time estimate; measured durations override it |
-| `speakTTS(label)` | Speaks via `speechSynthesis`; measures and caches real duration |
+| `speakTTS(label)` | Speaks via the active backend; measures and caches real duration |
+| `loadVoices()` | Loads the backend's voice list into unified `ttsVoices` |
 | `queueSpeech(plan, startAt)` / `pumpSpeech(now)` | Queue utterances at audio-clock times / fire due ones each frame |
 | `clearSpeechQueue()` | Empties the queue and cancels in-flight speech |
 | `pickVoice()` / `populateVoices()` | Resolve the active voice / fill the Voice dropdown |

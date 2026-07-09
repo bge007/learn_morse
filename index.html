@@ -551,54 +551,83 @@ function morseDisplay(text) {
     .join("   /   ");
 }
 
-/* ---------- Spoken audio: browser Text-to-Speech (Web Speech API) ---------- */
-// Speech is synthesized live via speechSynthesis — no audio files are needed.
+/* ---------- Spoken audio: cross-platform Text-to-Speech ---------- */
+// One speech layer, two backends, chosen at runtime:
+//  - Native (Android/iOS app): @capacitor-community/text-to-speech, bridged to
+//    the OS speech engine. Required because the Android WebView does NOT
+//    implement the Web Speech API (Chrome does; WebView doesn't).
+//  - Web (Windows / Linux / macOS browsers): the standard speechSynthesis API.
 // Utterances cannot be scheduled on an AudioContext, so they are queued with
 // absolute audio-clock times and fired from the animation loop. Exports (WAV /
 // video) therefore contain the Morse tones only; the plan still reserves the
 // same silent windows so live and exported timing match.
 const TTS_RATE = 1.0;
-let ttsVoice = null;
-const ttsMeasured = {};   // label -> real duration (s), learned on first speak
+let ttsVoices = [];      // [{name, lang, index, _v?}] unified across backends
+let ttsVoice = null;     // active entry from ttsVoices (null until resolved)
+const ttsMeasured = {};  // label -> real duration (s), learned on first speak
 
-function ttsSupported() { return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window; }
+function nativeTTS() {
+  const c = window.Capacitor;
+  return (c && c.isNativePlatform && c.isNativePlatform() &&
+          c.Plugins && c.Plugins.TextToSpeech) || null;
+}
+function webTTS() {
+  return ("speechSynthesis" in window && "SpeechSynthesisUtterance" in window)
+    ? window.speechSynthesis : null;
+}
+function ttsSupported() { return !!(nativeTTS() || webTTS()); }
+
+// Load the voice list from whichever backend is active into a unified shape.
+async function loadVoices() {
+  const n = nativeTTS();
+  if (n) {
+    try {
+      const res = await n.getSupportedVoices();
+      ttsVoices = (res.voices || []).map((v, i) => ({
+        name: v.name || v.voiceURI || ("Voice " + (i + 1)),
+        lang: v.lang || "", index: i
+      }));
+    } catch (e) { ttsVoices = []; }
+    return;
+  }
+  const w = webTTS();
+  ttsVoices = w ? w.getVoices().map((v, i) => ({ name: v.name, lang: v.lang, index: i, _v: v })) : [];
+}
 
 // Resolve the active voice: the user's pick from the Voice select when
 // available, otherwise a sensible English default.
 function pickVoice() {
-  if (!ttsSupported()) return;
-  const vs = speechSynthesis.getVoices();
-  if (!vs.length) return;
   const sel = $("voice");
   const want = sel ? sel.value : "";
-  ttsVoice = (want && vs.find(v => v.name === want))
-          || vs.find(v => /^en/i.test(v.lang) && v.default)
-          || vs.find(v => /^en/i.test(v.lang))
-          || vs[0];
+  ttsVoice = (want && ttsVoices.find(v => v.name === want))
+          || ttsVoices.find(v => /^en/i.test(v.lang) && v._v && v._v.default)
+          || ttsVoices.find(v => /^en/i.test(v.lang))
+          || ttsVoices[0] || null;
 }
 
-// Fill the Voice select with every voice installed on the system
+// Fill the Voice select with every voice the backend offers
 // (e.g. male/female variants, English (India), other languages).
-// Voices load asynchronously in most browsers, so this re-runs on
-// voiceschanged; a saved-but-not-yet-loaded pick waits in dataset.want.
-function populateVoices() {
+// Voices load asynchronously, so this re-runs on voiceschanged (web);
+// a saved-but-not-yet-loaded pick waits in dataset.want.
+async function populateVoices() {
   const sel = $("voice");
   if (!sel || !ttsSupported()) return;
-  const vs = speechSynthesis.getVoices();
+  await loadVoices();
   const want = sel.dataset.want || sel.value;
   sel.innerHTML = '<option value="">Auto (English)</option>';
-  for (const v of vs) {
+  for (const v of ttsVoices) {
     const o = document.createElement("option");
     o.value = v.name;
-    o.textContent = v.name + " — " + v.lang;
+    o.textContent = v.name + (v.lang ? " — " + v.lang : "");
     sel.appendChild(o);
   }
-  if (want && vs.some(v => v.name === want)) { sel.value = want; delete sel.dataset.want; }
+  if (want && ttsVoices.some(v => v.name === want)) { sel.value = want; delete sel.dataset.want; }
   pickVoice();
 }
 if (ttsSupported()) {
   populateVoices();
-  try { speechSynthesis.onvoiceschanged = populateVoices; } catch (e) {}
+  const w = webTTS();
+  if (w && !nativeTTS()) { try { w.onvoiceschanged = populateVoices; } catch (e) {} }
 }
 
 function speakMode() { const s = $("speakMode"); return s ? s.value : "off"; }
@@ -613,18 +642,30 @@ function ttsDur(label, isWord) {
 
 // Speak `label` now; record its real duration so later plans are accurate.
 function speakTTS(label) {
-  if (!ttsSupported()) return;
-  const u = new SpeechSynthesisUtterance(label);
-  if (ttsVoice) u.voice = ttsVoice;
-  u.rate = TTS_RATE;
-  let t0 = 0;
-  u.onstart = () => { t0 = performance.now(); };
-  u.onend = () => {
-    if (!t0) return;
+  const measure = t0 => {
     const d = (performance.now() - t0) / 1000;
     if (d > 0.05 && d < 10 && !ttsMeasured[label]) { ttsMeasured[label] = d; refresh(); }
   };
-  try { speechSynthesis.speak(u); } catch (e) {}
+
+  const n = nativeTTS();
+  if (n) {                                   // native engine (Android/iOS)
+    const opts = { text: label, rate: TTS_RATE,
+                   lang: (ttsVoice && ttsVoice.lang) || "en-US" };
+    if (ttsVoice) opts.voice = ttsVoice.index;
+    const t0 = performance.now();
+    n.speak(opts).then(() => measure(t0)).catch(() => {});
+    return;
+  }
+
+  const w = webTTS();                        // browser speechSynthesis
+  if (!w) return;
+  const u = new SpeechSynthesisUtterance(label);
+  if (ttsVoice && ttsVoice._v) u.voice = ttsVoice._v;
+  u.rate = TTS_RATE;
+  let t0 = 0;
+  u.onstart = () => { t0 = performance.now(); };
+  u.onend = () => { if (t0) measure(t0); };
+  try { w.speak(u); } catch (e) {}
 }
 
 /* ---------- TTS queue: fire utterances at plan times off the audio clock ---------- */
@@ -640,7 +681,10 @@ function pumpSpeech(now) {
 }
 function clearSpeechQueue() {
   ttsQueue = [];
-  if (ttsSupported()) { try { speechSynthesis.cancel(); } catch (e) {} }
+  const n = nativeTTS();
+  if (n) { try { n.stop(); } catch (e) {} return; }
+  const w = webTTS();
+  if (w) { try { w.cancel(); } catch (e) {} }
 }
 
 // Per-letter (reading order) speak assignment for the current mode: null | {label,isWord}.
