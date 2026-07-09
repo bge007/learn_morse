@@ -1,12 +1,17 @@
 # Morse Code Studio
 
 Convert text to **Morse code**, hear it as a configurable tone (default **700 Hz**),
-optionally **hear each letter or whole word spoken** (via the browser's built-in
-**Text-to-Speech**) after its Morse, watch it on a **9:16 animated display**, and
-export it as an **audio (`.wav`)** or **video (`.mp4`)** file.
+optionally **hear each letter or whole word spoken** by live **Text-to-Speech** —
+before or after its Morse, in any voice your device offers — watch it on a
+**9:16 animated display**, and export it as an **audio (`.wav`)** or
+**video (`.mp4`)** file.
 
-It runs as a single, dependency-free web app (`index.html`) and is also packaged as an
-**Android app** (a Capacitor WebView shell) with a tabbed, full-screen mobile UI.
+One codebase runs everywhere: a single-file web app (`index.html`, no build step)
+for any browser on Windows / Linux / macOS, and the same file packaged as a native
+**Android app** (Capacitor) with a tabbed, full-screen mobile UI. iOS needs only
+`npx cap add ios` on a Mac.
+
+**Current version: 1.3** (Android `versionCode 4`).
 
 - **Web app:** open `index.html` over a local HTTP server.
 - **Android app:** build it yourself (see
@@ -36,33 +41,37 @@ It runs as a single, dependency-free web app (`index.html`) and is also packaged
   durations, and the gaps between elements, letters, and words. Live WPM + total duration.
 - **A–Z practice button** — fills the message with all 26 letters (space-separated,
   so each letter gets a word gap) for alphabet drills.
-- **Speak-after-Morse** modes (browser TTS — no audio files):
-  - *Each letter (on change)* — after a letter's Morse is keyed, its name is spoken
+- **Spoken letters and words** via live Text-to-Speech — no audio files. Native OS
+  speech engine inside the Android app, `speechSynthesis` in browsers:
+  - *Each letter (on change)* — a letter's name is spoken alongside its Morse
     (`AAAA` → key it four times, say "A" once).
-  - *Whole word* — after a word's Morse, the word is spoken.
-- **Voice picker** — choose any Text-to-Speech voice installed on the system
+  - *Whole word* — the word is spoken alongside its Morse.
+- **Voice picker** — choose any Text-to-Speech voice the device offers
   (male / female / regional variants such as English (India)); persisted.
 - **Speak order (⇅ Order)** — choose whether each letter/word is spoken **after**
   its Morse (default — hear the code, then the answer) or **before** it
   (hear the name, then the code); persisted.
-- **9:16 animated display** synced to the audio (amber while keyed, blue while spoken).
+- **9:16 animated display** synced to the audio (amber while keyed, blue while spoken),
+  with a height-capped scrolling Morse preview on the Create screen.
 - **Loop** — repeat the whole message until stopped.
 - **Export:** `.wav` (offline render) and a **1080×1920 `.mp4`** (H.264/AAC via
   MediaRecorder). Exports contain the Morse tones (TTS speech is live-only; its
   timing windows are preserved as silence).
-- **Android app:** Create / Settings tabs, a full-screen player, and a full-screen video
-  result screen; hardware-back aware.
+- **Android app:** Create / Settings tabs (speech + timing options live under
+  Settings), a full-screen player, and a full-screen video result screen;
+  hardware-back aware.
 
 ---
 
 ## Repository layout
 
 ```
-index.html            The entire web app (HTML + CSS + JS, no build step)
+index.html            The entire web app (HTML + CSS + JS, ~1,400 lines, no build step)
 copy-web.mjs          Mirrors index.html into www/ for the Android build
 capacitor.config.json Capacitor app config (id com.morsestudio.app)
-package.json          npm scripts + Capacitor deps
+package.json          npm scripts + Capacitor deps (incl. the native TTS plugin)
 android/              Generated Capacitor Android (Gradle) project
+MASTER_PROMPT.md      Architecture guide + full development history (read before forking)
 .claude/launch.json   Dev preview server config
 ```
 
@@ -217,14 +226,16 @@ Defaults follow standard Morse ratios at a 92 ms dot (≈ 13 WPM).
 
 ## How it works
 
-- **Timing model:** `buildPlan()` lays out every letter as Morse elements followed by
-  an optional spoken window (letter name or whole word), in offsets from zero.
-  Renderers add a start time.
+- **Timing model:** `buildPlan()` lays out every letter as Morse elements plus an
+  optional spoken window (letter name or whole word) — before or after the Morse,
+  per the ⇅ Order setting — in offsets from zero. Renderers add a start time.
 - **Audio:** one oscillator runs continuously and a gain node gates it per element
   (click-free ramps).
-- **Speech:** `speechSynthesis` utterances can't be scheduled on an AudioContext, so
-  they are queued with absolute audio-clock times and fired from the animation loop —
-  keeping speech and Morse in sync.
+- **Speech:** one abstraction, two backends — the Capacitor TTS plugin inside the
+  app, `speechSynthesis` in browsers. Utterances can't be scheduled on an
+  AudioContext, so they are queued with absolute audio-clock times and fired from
+  the animation loop — keeping speech and Morse in sync. Durations start as
+  estimates and are refined from measured playback.
 - **Display:** a `requestAnimationFrame` loop reads `AudioContext.currentTime` to drive
   the 9:16 view; the same draw logic renders to a `<canvas>` for video.
 - **Export:** WAV via `OfflineAudioContext`; MP4 via `canvas.captureStream()` + a

@@ -2,13 +2,15 @@
 
 This document is the single source of truth for any AI assistant or developer forking or continuing work on this project. It describes what the app does, how it is built, what changes have been made from the original source, and the full history of the prompts that shaped the current version. Read the whole thing before making changes.
 
+**Current version: 1.3** (Android `versionCode 4`) — repository: https://github.com/bge007/learn_morse
+
 ---
 
 ## What This App Is
 
-Morse Code Studio is a learning and practice tool that converts typed text into Morse code audio. You type a message, press Play, and the app keys out the Morse code as a clean sine-wave tone through your speakers. It also shows a synchronized animated display — a large letter on screen turns amber while each Morse element sounds, and turns blue while the letter name is spoken aloud after the code finishes.
+Morse Code Studio is a learning and practice tool that converts typed text into Morse code audio. You type a message, press Play, and the app keys out the Morse code as a clean sine-wave tone through your speakers. It also shows a synchronized animated display — a large letter on screen turns amber while each Morse element sounds, and turns blue while the letter name is spoken aloud (before or after the code, per the ⇅ Order setting).
 
-The app is designed for anyone learning Morse code. It lets you hear the rhythm of dots and dashes, watch the symbols light up in sync, and hear the letter name confirmed after each one so you can check your mental decoding.
+The app is designed for anyone learning Morse code. It lets you hear the rhythm of dots and dashes, watch the symbols light up in sync, and hear the letter name spoken with each one — after the code to check your decoding, or before it to learn the patterns.
 
 Beyond playback, the app can:
 - Export the audio as a `.wav` file
@@ -19,9 +21,9 @@ Beyond playback, the app can:
 
 ## How It Is Structured
 
-The entire web application lives in a **single file: `index.html`**. There is no framework, no bundler, no build step for the web version. All HTML, CSS, and JavaScript are in that one file (about 1,600 lines). This is intentional — it keeps the app portable and simple to serve.
+The entire web application lives in a **single file: `index.html`**. There is no framework, no bundler, no build step for the web version. All HTML, CSS, and JavaScript are in that one file (about 1,400 lines). This is intentional — it keeps the app portable and simple to serve.
 
-The Android version is just a thin Capacitor shell (a WebView) that loads the same `index.html`. The `android/` folder contains the generated Android project. Building the APK requires Node.js, JDK 17, and the Android SDK.
+The Android version is a thin Capacitor shell (a WebView) that loads the same `index.html`, plus **one native plugin** — `@capacitor-community/text-to-speech` — that bridges speech to the OS engine (the Android WebView has no Web Speech API). The `android/` folder contains the generated Android project. Building the APK requires Node.js, JDK 17, and the Android SDK. iOS would be `npx cap add ios` on a Mac; the same code and plugin work there unchanged.
 
 ### File Layout
 
@@ -44,7 +46,7 @@ switched to live browser Text-to-Speech — see the prompt history below.)
 
 ## Running the App Locally
 
-Speech is synthesized live by the browser (no files fetched), so the app even works opened directly as a `file://` page — but serving over HTTP is still the recommended workflow.
+Speech is synthesized live (no files fetched), so the app even works opened directly as a `file://` page — but serving over HTTP is still the recommended workflow. In a browser you get the web TTS backend; the native backend only exists inside the installed app.
 
 Start the dev server:
 ```
@@ -68,11 +70,11 @@ Then open **http://localhost:8753/** in your browser.
    - Volume: 70%
    These follow standard Morse ratios (dot=1 unit, dash=3, letter gap=3, word gap=7), giving approximately 13 WPM at the defaults. All settings are saved to `localStorage` automatically.
 
-3. **Speak modes** — after the Morse code for each letter/word, speech is synthesized
-   live by the browser's **Web Speech API** (`speechSynthesis`) — no audio files:
+3. **Speak modes** — each letter/word can be announced by live Text-to-Speech
+   (native OS engine in the app, `speechSynthesis` in browsers — no audio files):
    - *Off* — Morse only, no speech
-   - *Each letter* — after each letter's code plays, the letter name is spoken
-   - *Whole word* — after the whole word's code plays, the word is spoken
+   - *Each letter* — the letter name is spoken with each letter's code
+   - *Whole word* — the word is spoken with the word's code
    Digits and punctuation are announced too (TTS can speak anything).
 
 3b. **Voice picker** — a Voice dropdown lists every TTS voice installed on the
@@ -97,7 +99,10 @@ Then open **http://localhost:8753/** in your browser.
 
 8. **MP4 video export** — records the animated 9:16 display in real time using `canvas.captureStream()` and `MediaRecorder`, then lets you save or share the resulting 1080×1920 video.
 
-9. **Settings tab** — all timing, frequency, and volume controls with a Reset button.
+9. **Settings tab** — two sections: **Speech** (Speak mode, Voice, Order) and
+   **Tone & timing** (frequency, durations, gaps, volume) with a Reset button.
+   The Create screen stays minimal: message + A–Z, scrolling Morse preview
+   (max-height 26vh), stats, Loop, and the Play / Video / WAV buttons.
 
 ---
 
@@ -118,7 +123,7 @@ The gap between the Morse and the speech (on whichever side) is `SPOKEN_GAP = 0.
 
 **The animation is driven by `AudioContext.currentTime`**, not by timers. A `requestAnimationFrame` loop reads the audio clock, finds the current letter via binary search, and updates the display. This keeps the visual perfectly in sync with the audio.
 
-**Speech is synthesized live and queued off the audio clock.** `speechSynthesis` utterances can't be scheduled on an AudioContext, so pending utterances are stored in `ttsQueue` with absolute audio-clock times and fired from the animation loop (`pumpSpeech`). Durations are estimated up front (`ttsDur`) and replaced with measured values (`ttsMeasured`) once each utterance has actually played, so plans get more accurate over time. Changing voice clears the measured cache. Because TTS can't be routed into `OfflineAudioContext` or `MediaRecorder`, **WAV and video exports carry the Morse tones only** — the speech windows are preserved as silence so exported timing matches live playback.
+**Speech is synthesized live and queued off the audio clock.** TTS utterances (on either backend — native plugin or `speechSynthesis`) can't be scheduled on an AudioContext, so pending utterances are stored in `ttsQueue` with absolute audio-clock times and fired from the animation loop (`pumpSpeech`). Durations are estimated up front (`ttsDur`) and replaced with measured values (`ttsMeasured`) once each utterance has actually played — the native path measures via the plugin's speak() promise, the web path via onstart/onend — so plans get more accurate over time. Changing voice clears the measured cache. Because TTS can't be routed into `OfflineAudioContext` or `MediaRecorder`, **WAV and video exports carry the Morse tones only** — the speech windows are preserved as silence so exported timing matches live playback.
 
 ---
 
@@ -287,7 +292,7 @@ cd android && .\gradlew.bat assembleDebug
 
 These are design decisions baked deeply into the codebase. Violating them will break things in subtle ways.
 
-1. **`index.html` is self-contained.** No external imports, no CDN links, no bundler. Everything is inline.
+1. **`index.html` is self-contained.** No external imports, no CDN links, no bundler. Everything is inline. (Inside the Android app, Capacitor injects its bridge and the TTS plugin into the page at runtime — `index.html` itself imports nothing and detects them via `window.Capacitor`.)
 
 2. **`AudioContext.currentTime` is the single clock.** All animation, progress bar updates, and loop timing are driven by reading the audio clock. Do not replace this with `Date.now()` or `setTimeout`.
 
@@ -569,6 +574,21 @@ the controls. Two changes:
 - `.morse-out` gained `max-height: 26vh; overflow-y: auto` so a long preview
   scrolls inside its box instead of pushing the buttons down.
 - Version bumped to **1.3 (versionCode 4)**.
+
+---
+
+### Prompt 15 — Documentation refresh
+
+> *"Update README.md and MASTER_PROMPT.md, remove all stale information and enhance based on the current application options and features accordingly"*
+
+Both documents were audited against the v1.3 app. Fixed: intros still described
+browser-only, speak-after-only TTS (now dual-backend with configurable order);
+the README repository layout was missing `MASTER_PROMPT.md`; "How it works" only
+covered the web speech path; the Settings-tab feature entry predated the Speech
+section; the `index.html` line count was stale (~1,400 lines); and a current-version
+statement was added to both files. (Between the numbered feature prompts there were
+also routine "update GitHub" requests and APK builds for v1.1–v1.3, recorded in the
+git history rather than here.)
 
 ---
 
