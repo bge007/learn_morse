@@ -183,9 +183,9 @@ abstraction picks the right backend per platform at runtime:
 The native plugin is required on Android because the **Android System WebView does
 not implement the Web Speech API** (Chrome does; a WebView shell doesn't).
 
-- The **Voice** dropdown on the Create tab lists every TTS voice the backend offers
-  (e.g. male/female variants, English (India), other languages). The choice is
-  persisted in `localStorage`.
+- The **Voice** dropdown (Settings tab → Speech) lists every TTS voice the backend
+  offers (e.g. male/female variants, English (India), other languages). The choice
+  is persisted in `localStorage`.
 - **Auto (English)** picks the default English voice.
 - Utterance durations are estimated up front and refined with measured durations
   after the first playback, so the timeline stays accurate.
@@ -200,6 +200,9 @@ Set in the app's **Settings** tab (persisted in `localStorage`):
 
 | Setting | Default | Meaning |
 |---|---|---|
+| Speak | Each letter | Off / Each letter / Whole word |
+| Voice | Auto (English) | Any TTS voice the platform offers |
+| Order | Morse first | Speech before or after each letter's Morse |
 | Tone frequency | 700 Hz | Pitch of the Morse tone |
 | Dot duration | 92 ms | Length of a `·` (1 unit) |
 | Dash duration | 277 ms | Length of a `−` (≈ 3 units) |

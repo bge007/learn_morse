@@ -153,6 +153,9 @@
     border-radius: 10px;
     padding: 12px 14px;
     min-height: 46px;
+    max-height: 26vh;              /* long messages scroll inside the box */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     word-break: break-word;
     white-space: pre-wrap;
     letter-spacing: 1px;
@@ -363,6 +366,17 @@
         <span>Length <b id="dur">—</b></span>
         <span id="charsInfo"></span>
       </div>
+      <label class="toggle"><input type="checkbox" id="loop" /> 🔁 Loop <span class="toggle-note">repeat until Stop</span></label>
+      <div class="actions">
+        <button id="play" class="primary big">▶ Play</button>
+        <button id="recordVideo" class="accent big">🎬 Create Video</button>
+      </div>
+      <button id="download" class="ghost wide">⤓ Save audio (.wav)</button>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="screen" id="screen-settings">
+      <div class="section-label">Speech</div>
       <label class="toggle">🔊 Speak
         <select id="speakMode">
           <option value="off">Off</option>
@@ -379,16 +393,6 @@
           <option value="before">Speak first, then Morse</option>
         </select>
       </label>
-      <label class="toggle"><input type="checkbox" id="loop" /> 🔁 Loop <span class="toggle-note">repeat until Stop</span></label>
-      <div class="actions">
-        <button id="play" class="primary big">▶ Play</button>
-        <button id="recordVideo" class="accent big">🎬 Create Video</button>
-      </div>
-      <button id="download" class="ghost wide">⤓ Save audio (.wav)</button>
-    </section>
-
-    <!-- SETTINGS -->
-    <section class="screen" id="screen-settings">
       <div class="section-label">Tone &amp; timing</div>
       <div class="grid">
         <div class="field">

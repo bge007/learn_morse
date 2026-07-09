@@ -148,16 +148,18 @@ The app uses a mobile-first shell layout with a fixed header, scrollable content
       textarea#text                 ← the message input
       #morseOut                     ← live dot/dash preview
       .meta                         ← WPM, duration, character count
-      #speakMode select             ← 🔊 Speak: Off / Each letter / Whole word
-      #voice select                 ← 🗣 Voice: Auto (English) + all system TTS voices
-      #speakOrder select            ← ⇅ Order: Morse first / Speak first
       #loop checkbox
       #play button                  ← opens player overlay
       #recordVideo button           ← opens player overlay + records
       #download button              ← saves .wav
     #screen-settings  (Settings tab)
-      inputs: freq, dot, dash, gapElement, gapLetter, gapWord, volume
-      #reset button
+      "Speech" section:
+        #speakMode select           ← 🔊 Speak: Off / Each letter / Whole word
+        #voice select               ← 🗣 Voice: Auto (English) + all system TTS voices
+        #speakOrder select          ← ⇅ Order: Morse first / Speak first
+      "Tone & timing" section:
+        inputs: freq, dot, dash, gapElement, gapLetter, gapWord, volume
+        #reset button
 
   .tabbar                          Create tab | Settings tab
 
@@ -551,6 +553,22 @@ abstraction, not a rewrite:
   built with the plugin registered (verified in assets/capacitor.plugins.json).
 - iOS support would be `npx cap add ios` on a Mac — the same speech layer works
   there via AVSpeechSynthesizer.
+
+---
+
+### Prompt 14 — Simplify the Play screen; move speech options to Settings
+
+> *"…the screen overlaps between the morseOut window and options below. Consider moving speak, voice and Order options to the settings screen for simplifying the Play screen"*
+
+On phones the Morse preview grows tall (especially with the A–Z fill) and crowded
+the controls. Two changes:
+
+- The 🔊 Speak, 🗣 Voice, and ⇅ Order selects moved from the Create screen to a
+  new **"Speech"** section at the top of the Settings tab (IDs unchanged, so all
+  JS wiring and persistence work as before). Loop stays on Create.
+- `.morse-out` gained `max-height: 26vh; overflow-y: auto` so a long preview
+  scrolls inside its box instead of pushing the buttons down.
+- Version bumped to **1.3 (versionCode 4)**.
 
 ---
 
