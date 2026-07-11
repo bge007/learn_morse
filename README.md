@@ -14,8 +14,9 @@ for any browser on Windows / Linux / macOS, and the same file packaged as a nati
 **Current version: 1.5** (Android `versionCode 6`).
 
 - **Web app:** open `index.html` over a local HTTP server.
-- **Android app:** build it yourself (see
-  [Build the Android app](#build-the-android-app-apk-from-scratch)).
+- **Android app:** download the ready-made APK from the
+  [Releases page](https://github.com/bge007/learn_morse/releases), or build it
+  yourself (see [Build the Android app](#build-the-android-app-apk-from-scratch)).
 
 ---
 
