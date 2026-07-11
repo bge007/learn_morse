@@ -11,7 +11,7 @@ for any browser on Windows / Linux / macOS, and the same file packaged as a nati
 **Android app** (Capacitor) with a tabbed, full-screen mobile UI. iOS needs only
 `npx cap add ios` on a Mac.
 
-**Current version: 1.5** (Android `versionCode 6`).
+**Current version: 1.6** (Android `versionCode 7`).
 
 - **Web app:** open `index.html` over a local HTTP server.
 - **Android app:** download the ready-made APK from the
@@ -57,6 +57,9 @@ for any browser on Windows / Linux / macOS, and the same file packaged as a nati
 - **9:16 animated display** synced to the audio (amber while keyed, blue while spoken),
   with a height-capped scrolling Morse preview on the Practice screen.
 - **Loop** — repeat the whole message until stopped.
+- **Pause / Resume** — freeze playback mid-message (tones, animation, and pending
+  speech all halt together) and continue exactly where it left off; Space bar
+  toggles it on desktop.
 - **Screen stays awake during playback** — the app holds a wake lock while playing
   or recording (native keep-awake plugin in the app, Screen Wake Lock API in
   browsers) so Android's screen timeout can't silence TTS mid-message; released

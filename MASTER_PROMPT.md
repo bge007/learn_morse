@@ -2,7 +2,7 @@
 
 This document is the single source of truth for any AI assistant or developer forking or continuing work on this project. It describes what the app does, how it is built, what changes have been made from the original source, and the full history of the prompts that shaped the current version. Read the whole thing before making changes.
 
-**Current version: 1.5** (Android `versionCode 6`) — repository: https://github.com/bge007/learn_morse
+**Current version: 1.6** (Android `versionCode 7`) — repository: https://github.com/bge007/learn_morse
 
 ---
 
@@ -183,7 +183,7 @@ Full-screen overlays (slide up from bottom):
       #stageChar                   large letter (amber / blue / dim)
       #stageSymbols                dot and dash shapes
     #stageCaption                  all letters, current one highlighted
-    progress bar, Replay, Stop buttons
+    progress bar, Replay, Pause/Resume, Stop buttons
   #screen-video                    ← recorded video result
     <video> element
     Replay, Save/Share buttons
@@ -639,6 +639,29 @@ dual-backend pattern as speech:
 
 ---
 
+### Prompt 18 — Pause / Resume in the player
+
+> *"Add a pause button also in the play screen which permits resuming the rest of the flow"*
+
+A **⏸ Pause / ▶ Resume** button now sits between Replay and Stop in the player
+overlay (Space bar toggles it on desktop while the player is open).
+
+The mechanism leans on the architecture's single-clock invariant:
+`ctx.suspend()` freezes `AudioContext.currentTime`, so the scheduled gain
+ramps, the `osc.stop()` time, the progress bar, the stage animation, and the
+clock-gated TTS queue all halt **together** — and `ctx.resume()` continues
+everything exactly in sync. No rescheduling, no timeline math.
+
+Speech that is mid-utterance at pause time: the web backend uses
+`speechSynthesis.pause()/resume()`; the native plugin has no pause, so the
+current utterance is cut short (upcoming ones stay queued and fire on resume).
+
+`isPaused` is reset in `play()` and `finishPlayback()`; Stop, Replay, and
+Restart all work from the paused state. Recording cannot be paused
+(MediaRecorder captures in real time). Version bumped to **1.6 (versionCode 7)**.
+
+---
+
 ## Quick Reference — Key Functions
 
 | Function | What It Does |
@@ -656,6 +679,7 @@ dual-backend pattern as speech:
 | `queueSpeech(plan, startAt)` / `pumpSpeech(now)` | Queue utterances at audio-clock times / fire due ones each frame |
 | `clearSpeechQueue()` | Empties the queue and cancels in-flight speech |
 | `stayAwake()` / `allowSleep()` | Hold/release a screen wake lock during playback (plugin in app, wakeLock API on web) |
+| `pausePlayback()` / `resumePlayback()` / `togglePause()` | Freeze/continue playback via `ctx.suspend()`/`resume()` (speech pauses on web, current utterance cut on native) |
 | `pickVoice()` / `populateVoices()` | Resolve the active voice / fill the Voice dropdown |
 | `updateStage(now)` | Animation frame handler — syncs display to audio clock |
 | `refresh()` | Redraws the Morse display and recalculates duration estimate |

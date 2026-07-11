@@ -462,6 +462,7 @@
     <div class="progress"><div id="bar"></div></div>
     <div class="player-buttons">
       <button id="replay" class="ghost big">▶ Replay</button>
+      <button id="pause" class="accent big" disabled>⏸ Pause</button>
       <button id="stop" class="danger big" disabled>■ Stop</button>
     </div>
   </div>
@@ -836,7 +837,7 @@ function scheduleTones(gainParam, plan, startAt, vol) {
 
 /* ---------- Live playback ---------- */
 let ctx = null, osc = null, gainNode = null;
-let isPlaying = false, rafId = null, playStart = 0, playEnd = 0, plan = null;
+let isPlaying = false, isPaused = false, rafId = null, playStart = 0, playEnd = 0, plan = null;
 let timeline = [], stageSpans = [], curIdx = -1;
 let loopOn = false, iterStart = 0, iterLen = 0, scheduledIter = 0, loopVol = 0;
 const LOOP_GAP = 1.0;   // pause between repeats when looping
@@ -860,6 +861,9 @@ function setButtons() {
   $("recordVideo").disabled = busy;
   $("recordVideo").textContent = isRecording ? "● Recording…" : "🎬 Create Video";
   const rp = $("replay"); if (rp) rp.disabled = isRecording;
+  const pb = $("pause");
+  pb.disabled = !isPlaying;                 // playback only; recording can't pause
+  pb.textContent = isPaused ? "▶ Resume" : "⏸ Pause";
 }
 
 async function play() {
@@ -910,6 +914,7 @@ async function play() {
   }
 
   isPlaying = true;
+  isPaused = false;
   stayAwake();
   setButtons();
   const nSpeak = plan.letters.filter(l => l.spell).length;
@@ -945,6 +950,35 @@ function rafTick() {
   }
 }
 
+/* ---------- Pause / resume ----------
+   ctx.suspend() freezes the AudioContext clock, so every scheduled tone, the
+   progress bar, the stage animation, and the clock-gated TTS queue all halt
+   together and continue exactly where they left off on ctx.resume(). Speech
+   that is mid-utterance at pause time: the web backend pauses/resumes it
+   natively; the native plugin has no pause, so the current utterance is cut
+   short (upcoming ones stay queued and still fire on resume). */
+async function pausePlayback() {
+  if (!isPlaying || isPaused || !ctx) return;
+  isPaused = true;
+  try { await ctx.suspend(); } catch (e) {}
+  const n = nativeTTS();
+  if (n) { try { n.stop(); } catch (e) {} }
+  else { const w = webTTS(); if (w) { try { w.pause(); } catch (e) {} } }
+  setButtons();
+  setStatus("Paused — tap Resume to continue.", "");
+}
+
+async function resumePlayback() {
+  if (!isPlaying || !isPaused) return;
+  isPaused = false;
+  if (ctx) { try { await ctx.resume(); } catch (e) {} }
+  if (!nativeTTS()) { const w = webTTS(); if (w) { try { w.resume(); } catch (e) {} } }
+  setButtons();
+  setStatus(loopOn ? "Looping…" : "Playing…", "ok");
+}
+
+function togglePause() { if (isPaused) resumePlayback(); else pausePlayback(); }
+
 function stopPlayback() {
   if (!ctx) return;
   try {
@@ -961,6 +995,7 @@ function stopPlayback() {
 function finishPlayback(stopped) {
   if (!isPlaying) return;
   isPlaying = false;
+  isPaused = false;
   allowSleep();
   loopOn = false;
   if (rafId) cancelAnimationFrame(rafId);
@@ -1582,8 +1617,10 @@ document.querySelectorAll(".fill").forEach(b => b.addEventListener("click", () =
 }));
 textEl.addEventListener("input", refresh);
 cfgIds.forEach(id => $(id).addEventListener("input", refresh));
+$("pause").addEventListener("click", togglePause);
 document.addEventListener("keydown", e => {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); startPlay(); }
+  if (e.key === " " && isPlaying && overlayName === "player") { e.preventDefault(); togglePause(); }
 });
 
 loadState();
