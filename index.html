@@ -841,6 +841,23 @@ let isPlaying = false, isPaused = false, rafId = null, playStart = 0, playEnd = 
 let timeline = [], stageSpans = [], curIdx = -1;
 let loopOn = false, iterStart = 0, iterLen = 0, scheduledIter = 0, loopVol = 0;
 const LOOP_GAP = 1.0;   // pause between repeats when looping
+const SPEECH_LEADIN = 1.0;  // delay before start when speech is on: lets the
+                            // TTS engine wake up so the first utterance isn't
+                            // swallowed by a cold start (Android inits async)
+
+// Wake the speech engine during the lead-in with an inaudible utterance.
+function warmUpTTS() {
+  const n = nativeTTS();
+  if (n) { try { n.speak({ text: " ", volume: 0 }).catch(() => {}); } catch (e) {} return; }
+  const w = webTTS();
+  if (w) {
+    try {
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0;
+      w.speak(u);
+    } catch (e) {}
+  }
+}
 function loopEnabled() { const c = $("loop"); return c ? c.checked : false; }
 
 let toastTimer = null;
@@ -893,7 +910,9 @@ async function play() {
   osc.connect(gainNode);
   gainNode.connect(ctx.destination);
 
-  playStart = ctx.currentTime + 0.12;
+  const speechOn = plan.letters.some(l => l.spell);
+  if (speechOn) warmUpTTS();
+  playStart = ctx.currentTime + (speechOn ? SPEECH_LEADIN : 0.12);
   loopOn = loopEnabled();
   loopVol = cfg.volume;
   iterStart = playStart;
@@ -1363,7 +1382,9 @@ async function recordVideo() {
   const letters = p.letters;
   const layout = layoutCaption(g, W, H, buildCaptionWords(letters));
 
-  const startAt = recCtx.currentTime + 0.2;          // brief lead-in
+  const recSpeechOn = p.letters.some(l => l.spell);
+  if (recSpeechOn) warmUpTTS();
+  const startAt = recCtx.currentTime + (recSpeechOn ? SPEECH_LEADIN : 0.2);   // lead-in (longer when TTS must wake up)
   scheduleTones(gain.gain, p, startAt, cfg.volume);
   clearSpeechQueue();
   queueSpeech(p, startAt);   // TTS is audible live; the recorded file has tones only

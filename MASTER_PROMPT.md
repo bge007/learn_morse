@@ -2,7 +2,7 @@
 
 This document is the single source of truth for any AI assistant or developer forking or continuing work on this project. It describes what the app does, how it is built, what changes have been made from the original source, and the full history of the prompts that shaped the current version. Read the whole thing before making changes.
 
-**Current version: 1.6** (Android `versionCode 7`) — repository: https://github.com/bge007/learn_morse
+**Current version: 1.7** (Android `versionCode 8`) — repository: https://github.com/bge007/learn_morse
 
 ---
 
@@ -662,6 +662,25 @@ Restart all work from the paused state. Recording cannot be paused
 
 ---
 
+### Prompt 19 — Fix the first TTS utterance being skipped
+
+> *"First TTS seems skipping as it may not be loading in while starting. add a one second pause before the play starts in case that can be a solution for the same."*
+
+Root cause: speech engines initialize asynchronously (especially Android
+TextToSpeech), so the first utterance can arrive before the engine is ready
+and get silently dropped. Two-part fix in `play()` and `recordVideo()`:
+
+- **`SPEECH_LEADIN = 1.0`** — when the plan contains speech, playback starts
+  1 s after scheduling instead of 0.12 s (Morse-only playback keeps the short
+  lead-in; no pointless delay).
+- **`warmUpTTS()`** — an inaudible utterance (a single space at volume 0) is
+  spoken immediately when Play is pressed, so the engine wakes up during the
+  lead-in and the first real utterance lands on a warm engine.
+
+Version bumped to **1.7 (versionCode 8)**.
+
+---
+
 ## Quick Reference — Key Functions
 
 | Function | What It Does |
@@ -680,6 +699,7 @@ Restart all work from the paused state. Recording cannot be paused
 | `clearSpeechQueue()` | Empties the queue and cancels in-flight speech |
 | `stayAwake()` / `allowSleep()` | Hold/release a screen wake lock during playback (plugin in app, wakeLock API on web) |
 | `pausePlayback()` / `resumePlayback()` / `togglePause()` | Freeze/continue playback via `ctx.suspend()`/`resume()` (speech pauses on web, current utterance cut on native) |
+| `warmUpTTS()` | Inaudible utterance at Play time so the engine is warm before the first real one (paired with `SPEECH_LEADIN`) |
 | `pickVoice()` / `populateVoices()` | Resolve the active voice / fill the Voice dropdown |
 | `updateStage(now)` | Animation frame handler — syncs display to audio clock |
 | `refresh()` | Redraws the Morse display and recalculates duration estimate |

@@ -11,7 +11,7 @@ for any browser on Windows / Linux / macOS, and the same file packaged as a nati
 **Android app** (Capacitor) with a tabbed, full-screen mobile UI. iOS needs only
 `npx cap add ios` on a Mac.
 
-**Current version: 1.6** (Android `versionCode 7`).
+**Current version: 1.7** (Android `versionCode 8`).
 
 - **Web app:** open `index.html` over a local HTTP server.
 - **Android app:** download the ready-made APK from the
