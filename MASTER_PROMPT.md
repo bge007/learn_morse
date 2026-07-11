@@ -2,7 +2,7 @@
 
 This document is the single source of truth for any AI assistant or developer forking or continuing work on this project. It describes what the app does, how it is built, what changes have been made from the original source, and the full history of the prompts that shaped the current version. Read the whole thing before making changes.
 
-**Current version: 1.4** (Android `versionCode 5`) — repository: https://github.com/bge007/learn_morse
+**Current version: 1.5** (Android `versionCode 6`) — repository: https://github.com/bge007/learn_morse
 
 ---
 
@@ -616,6 +616,29 @@ git history rather than here.)
 
 ---
 
+### Prompt 17 — Keep the screen awake during playback
+
+> *"How to prevent screen lock while this app playing in Android Mobile device. This is to avoid TTS gets stopped in the screen lock mode"*
+
+Android's screen timeout suspends the WebView and silences TTS mid-playback.
+Fixed with a wake lock held only while playing or recording, using the same
+dual-backend pattern as speech:
+
+- **Native (app):** `@capacitor-community/keep-awake@5.0.1` — `keepAwake()` sets
+  the window's keep-screen-on flag, `allowSleep()` clears it.
+- **Web:** the Screen Wake Lock API (`navigator.wakeLock.request("screen")`),
+  silently skipped where unsupported or the page isn't visible. A
+  `visibilitychange` listener re-acquires the lock on tab return if playback
+  is still running (browsers auto-release on hide).
+- Hooks: `stayAwake()` in `play()` and `recordVideo()`; `allowSleep()` in
+  `finishPlayback()` and `cleanupRecording()` — every stop path releases it.
+- Note: this prevents the *timeout* lock. If the user presses the power button,
+  Android still suspends the app (a foreground service would be needed to play
+  through a manually locked screen — deliberately out of scope).
+- Version bumped to **1.5 (versionCode 6)**.
+
+---
+
 ## Quick Reference — Key Functions
 
 | Function | What It Does |
@@ -632,6 +655,7 @@ git history rather than here.)
 | `loadVoices()` | Loads the backend's voice list into unified `ttsVoices` |
 | `queueSpeech(plan, startAt)` / `pumpSpeech(now)` | Queue utterances at audio-clock times / fire due ones each frame |
 | `clearSpeechQueue()` | Empties the queue and cancels in-flight speech |
+| `stayAwake()` / `allowSleep()` | Hold/release a screen wake lock during playback (plugin in app, wakeLock API on web) |
 | `pickVoice()` / `populateVoices()` | Resolve the active voice / fill the Voice dropdown |
 | `updateStage(now)` | Animation frame handler — syncs display to audio clock |
 | `refresh()` | Redraws the Morse display and recalculates duration estimate |

@@ -699,6 +699,38 @@ function clearSpeechQueue() {
   if (w) { try { w.cancel(); } catch (e) {} }
 }
 
+/* ---------- Keep the screen awake during playback ---------- */
+// Android locks the screen after the timeout, which suspends the WebView and
+// silences TTS mid-playback. Hold a wake lock only while playing/recording:
+//  - Native (Android/iOS app): @capacitor-community/keep-awake plugin.
+//  - Web: the Screen Wake Lock API where available (silently skipped elsewhere).
+let wakeSentinel = null;
+function nativeKeepAwake() {
+  const c = window.Capacitor;
+  return (c && c.isNativePlatform && c.isNativePlatform() &&
+          c.Plugins && c.Plugins.KeepAwake) || null;
+}
+function stayAwake() {
+  const n = nativeKeepAwake();
+  if (n) { try { n.keepAwake(); } catch (e) {} return; }
+  if ("wakeLock" in navigator && !wakeSentinel) {
+    navigator.wakeLock.request("screen")
+      .then(s => { wakeSentinel = s; })
+      .catch(() => {});
+  }
+}
+function allowSleep() {
+  const n = nativeKeepAwake();
+  if (n) { try { n.allowSleep(); } catch (e) {} return; }
+  if (wakeSentinel) { try { wakeSentinel.release(); } catch (e) {} wakeSentinel = null; }
+}
+// Browsers auto-release the wake lock when the tab is hidden; re-acquire on
+// return if playback or recording is still running.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") { wakeSentinel = null; return; }
+  if (isPlaying || isRecording) stayAwake();
+});
+
 // Per-letter (reading order) speak assignment for the current mode: null | {label,isWord}.
 // Letters: speak a letter when it changes from the previous character.
 // Words: speak the whole word (on change). TTS can speak anything, so digits
@@ -878,6 +910,7 @@ async function play() {
   }
 
   isPlaying = true;
+  stayAwake();
   setButtons();
   const nSpeak = plan.letters.filter(l => l.spell).length;
   setStatus((loopOn ? "Looping… " : "Playing… ") + (playEnd - playStart).toFixed(1) + "s" +
@@ -928,6 +961,7 @@ function stopPlayback() {
 function finishPlayback(stopped) {
   if (!isPlaying) return;
   isPlaying = false;
+  allowSleep();
   loopOn = false;
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
@@ -1333,6 +1367,7 @@ async function recordVideo() {
 
   recCanceled = false;
   isRecording = true;
+  stayAwake();
   setButtons();
   setStatus("Recording video in real time… " + (endAt - startAt).toFixed(1) + "s. Keep this tab focused.", "");
 
@@ -1366,6 +1401,7 @@ function cancelRecording() {
 
 function cleanupRecording() {
   isRecording = false;
+  allowSleep();
   if (recRaf) { cancelAnimationFrame(recRaf); recRaf = null; }
   try { recOsc && recOsc.stop(); } catch (e) {}
   clearSpeechQueue();
